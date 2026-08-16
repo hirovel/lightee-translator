@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { appLog, ipcService } from "./dist-main/main-ipc.js";
 import { EVENT_CHANNEL, FLUSH_CHANNEL, INVOKE_CHANNEL } from "./dist-main/shared/ipc-contract.js";
+import { evaluateSelfUpdate } from "./dist-main/shared/self-update-policy.js";
 import updater from "electron-updater";
 const { autoUpdater } = updater;
 
@@ -106,7 +107,11 @@ function waitForRendererClose(win, timeoutMs = 2_000) {
 }
 
 function configureAutoUpdates() {
-  if (!app.isPackaged || process.env.LIGHTEE_DISABLE_UPDATES === "1") return;
+  const decision = evaluateSelfUpdate({ isPackaged: app.isPackaged, env: process.env, execPath: process.execPath });
+  if (!decision.update) {
+    if (decision.reason !== "not-packaged") void appLog.write("info", `self-update skipped: ${decision.reason}`);
+    return;
+  }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on("update-downloaded", () => {

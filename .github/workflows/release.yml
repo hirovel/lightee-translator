@@ -55,6 +55,20 @@ jobs:
         run: npm run package:win
         working-directory: apps/electron
 
+      # 不带 tag 条件：workflow_dispatch 打包演练时也要能看到这一步的输出，
+      # 免得校验和文件本身的问题（比如漏了某个产物）要等到真正发布才发现。
+      - name: Generate SHA256SUMS.txt
+        shell: pwsh
+        working-directory: apps/electron/release
+        run: |
+          $files = Get-ChildItem -File | Where-Object { $_.Name -match '^Lightee-.*\.(exe|zip|blockmap)$' -or $_.Name -eq 'latest.yml' }
+          $lines = $files | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          }
+          $lines | Set-Content -Path SHA256SUMS.txt -Encoding utf8NoBOM
+          Get-Content SHA256SUMS.txt
+
       # 草稿发布：资产就位、正文空白，由人写完发布说明再手动 Publish。
       # generate_release_notes 关掉——自动生成的是提交列表，那是开发过程，不是给用户看的东西。
       # 文件逐个列出，不用 *.yml 通配：那会把 builder-debug.yml（electron-builder 的配置
@@ -70,7 +84,9 @@ jobs:
           files: |
             apps/electron/release/Lightee-*-setup.exe
             apps/electron/release/Lightee-*-portable.exe
+            apps/electron/release/Lightee-*-win-x64.zip
             apps/electron/release/Lightee-*-setup.exe.blockmap
             apps/electron/release/latest.yml
+            apps/electron/release/SHA256SUMS.txt
           draft: true
           generate_release_notes: false

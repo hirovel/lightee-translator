@@ -17,7 +17,13 @@
       "single-instance.js",
       "preload.js",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "!node_modules/@lightee/*/fixtures/**/*",
+      "!node_modules/@lightee/*/src/**/*",
+      "!node_modules/@lightee/*/test/**/*",
+      "!node_modules/@lightee/**/*.test.js",
+      "!node_modules/@lightee/**/*.test.js.map",
+      "!node_modules/@lightee/**/*.js.map"
     ],
     "directories": {
       "output": "release"
@@ -26,7 +32,7 @@
       "provider": "github",
       "owner": "hirovel",
       "repo": "lightee-translator",
-      "releaseType": "draft"
+      "releaseType": "release"
     },
     "win": {
       "icon": "build/icon.png",
@@ -39,6 +45,12 @@
         },
         {
           "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "x64"
           ]
@@ -66,7 +78,8 @@
     "build": "npm run sync:ui-shell && npm run build:main && vite build && npm run check:renderer && npm run check:package",
     "build:main": "npm run build:engine && tsc -p tsconfig.main.json",
     "start": "npm run build && electron .",
-    "package:win": "npm run build && electron-builder --win --publish never && npm run check:asar",
+    "prepare:wincodesign": "node scripts/prepare-wincodesign.mjs",
+    "package:win": "npm run prepare:wincodesign && npm run build && electron-builder --win --publish never && npm run check:asar",
     "package:dir": "npm run build && electron-builder --dir",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",

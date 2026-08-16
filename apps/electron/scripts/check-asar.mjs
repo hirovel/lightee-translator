@@ -100,11 +100,55 @@ if (process.platform === "win32" && existsSync(exePath)) {
   }
 }
 
+/**
+ * 自动更新的频道：`publish.releaseType` 会被烧进 `resources/app-update.yml`，
+ * electron-updater 读它决定去哪儿找新版本。写成 `draft` 会让更新器只认草稿版本，
+ * 而草稿对普通用户不可见——装出去的应用永远查不到更新，且不会报任何错。
+ *
+ * 这个字段容易被误改，因为「发布前要人工审核」这件事听上去就该写 draft。但审核闸门
+ * 属于 CI（release.yml 的 `draft: true`），与应用运行时去哪儿找版本是两回事。
+ * package.json 的 publish 段受 schema 严格校验，塞不进注释，所以把提醒放在这里。
+ */
+const updateYml = join(appRoot, "release", "win-unpacked", "resources", "app-update.yml");
+if (existsSync(updateYml)) {
+  const channel = /^\s*releaseType:\s*(\S+)/m.exec(readFileSync(updateYml, "utf8"))?.[1];
+  if (channel && channel !== "release") {
+    missing.push(`app-update.yml 的 releaseType 是「${channel}」，应为「release」——更新器会去找普通用户看不见的版本，自动更新静默失效`);
+  }
+}
+
+/**
+ * 内容黑名单：`@lightee/*` 是 `file:` 依赖，npm 安装时以**完整目录**形态整个拷进
+ * node_modules——`package.json` 的 `files` 白名单只在 `npm pack/publish` 时生效，
+ * 对 file: 依赖完全不设防。electron-builder 又把 node_modules 整目录收进 asar，
+ * 于是 fixtures、src、测试文件全部原样带走。
+ *
+ * git 跟踪状态在这条链路上也不设防：`fixtures/reference/` 从不提交，但装进
+ * node_modules 之后就是磁盘上的普通文件，跟踪与否与它进不进 asar无关——这正是
+ * content-provenance 不变量测试（只查 git 跟踪文件）看不见这条泄漏的原因。
+ *
+ * `reference/` 单独列严重级别：那是真实出版作品的人工译文，不是能不能接受的
+ * 问题，是绝对不能出现在任何发行产物里的红线。
+ */
+const contentViolations = [];
+for (const entry of entries) {
+  if (!/^node_modules\/@lightee\//.test(entry)) continue;
+  if (/\/fixtures\/reference(\/|$)/.test(entry)) {
+    contentViolations.push(`${entry}（内部素材，绝不可外发——红线）`);
+  } else if (/\/fixtures\//.test(entry)) {
+    contentViolations.push(`${entry}（测试用样例文本，无需随产物发行）`);
+  } else if (/\/(src|test)\//.test(entry) || /\.test\.js(\.map)?$/.test(entry)) {
+    contentViolations.push(`${entry}（源码/测试文件，产物只需要 dist/）`);
+  }
+}
+for (const v of contentViolations) missing.push(`内容泄漏：${v}`);
+
 if (missing.length) {
-  // 三类后果，严重度递减但发现难度递增：
+  // 四类后果，严重度递减但发现难度递增：
   // 缺模块 → 启动即 ERR_MODULE_NOT_FOUND；缺资源 → 无报错，静默回退成默认值；
-  // 元数据未改写 → 一切正常运行，只是每处露脸的地方都不是自己的名字。
-  console.error("打包产物有问题——发出去的包会崩溃、静默降级，或顶着别人的名字：");
+  // 元数据未改写 → 一切正常运行，只是每处露脸的地方都不是自己的名字；
+  // 内容泄漏 → 一切正常运行，只是把不该给的东西发给了每一个安装用户。
+  console.error("打包产物有问题——发出去的包会崩溃、静默降级、顶着别人的名字，或泄漏不该发行的内容：");
   for (const item of missing) console.error(`  · ${item}`);
   process.exit(1);
 }

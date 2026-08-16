@@ -44,8 +44,7 @@
           ]
         }
       ],
-      "requestedExecutionLevel": "asInvoker",
-      "signAndEditExecutable": false
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "artifactName": "Lightee-${version}-${os}-${arch}-setup.${ext}",

@@ -11,6 +11,7 @@
  * 用法：npm run package:win 之后 node scripts/check-asar.mjs
  */
 import { readFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, resolve, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import asar from "@electron/asar";
@@ -67,9 +68,43 @@ for (const entry of [manifest.main ?? "main.js", "preload.js"]) {
   }
 }
 
+/**
+ * 可执行文件自报的身份：图标、版本号、公司名都存在 PE 的资源段里，由 electron-builder
+ * 在打包时改写。这一步一旦被跳过（`signAndEditExecutable: false` 就会连带跳过——它关的
+ * 不只是签名，`Edit` 那半截同样失效），产物会顶着 Electron 自己的壳发出去：资源管理器
+ * 里是原子图标，属性页写着 GitHub, Inc. 和 Electron 的版本号。
+ *
+ * 这类问题没有任何报错，装完也能正常运行，只是每一处露脸的地方都不是自己的名字。
+ * 前两道检查看的是「文件在不在」，看不见「文件里写的是谁」，所以要单列这一条。
+ */
+const exePath = join(appRoot, "release", "win-unpacked", `${manifest.build?.productName ?? "app"}.exe`);
+if (process.platform === "win32" && existsSync(exePath)) {
+  const ps = spawnSync(
+    "powershell",
+    ["-NoProfile", "-Command", `$v=(Get-Item -LiteralPath '${exePath}').VersionInfo; Write-Output "$($v.ProductName)|$($v.CompanyName)|$($v.FileVersion)"`],
+    { encoding: "utf8" },
+  );
+  if (ps.status === 0) {
+    const [productName, companyName, fileVersion] = ps.stdout.trim().split("|");
+    const expected = {
+      ProductName: manifest.build?.productName,
+      CompanyName: manifest.author,
+      FileVersion: manifest.version,
+    };
+    const actual = { ProductName: productName, CompanyName: companyName, FileVersion: fileVersion };
+    for (const [field, want] of Object.entries(expected)) {
+      if (want && actual[field] !== want) {
+        missing.push(`${exePath.split(/[\\/]/).pop()} 的 ${field} 是「${actual[field] || "(空)"}」，应为「${want}」——可执行文件资源未被改写`);
+      }
+    }
+  }
+}
+
 if (missing.length) {
-  // 缺模块 → 启动即 ERR_MODULE_NOT_FOUND；缺资源 → 无报错，静默回退。后者更难发现。
-  console.error("打包产物缺文件——asar 里没有这些，装出来的应用会崩溃或静默降级：");
+  // 三类后果，严重度递减但发现难度递增：
+  // 缺模块 → 启动即 ERR_MODULE_NOT_FOUND；缺资源 → 无报错，静默回退成默认值；
+  // 元数据未改写 → 一切正常运行，只是每处露脸的地方都不是自己的名字。
+  console.error("打包产物有问题——发出去的包会崩溃、静默降级，或顶着别人的名字：");
   for (const item of missing) console.error(`  · ${item}`);
   process.exit(1);
 }

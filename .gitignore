@@ -11,6 +11,8 @@ apps/electron/.tmp/
 apps/electron/release/
 # 更新闭环演练产物：两个临时版本的完整安装包，只在本地跑 verify-update-flow 时存在
 apps/electron/verify-update/
+# Scoop 渠道演练产物：临时清单与子进程日志，只在本地跑 verify-scoop-install 时存在
+apps/electron/verify-scoop/
 docs/*-debug.png
 docs/*-result.png
 

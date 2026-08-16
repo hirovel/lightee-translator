@@ -66,8 +66,18 @@ jobs:
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"
           }
-          $lines | Set-Content -Path SHA256SUMS.txt -Encoding utf8NoBOM
+          # 必须是 LF。Set-Content 在 Windows 上写的是 CRLF，而校验这份文件的标准动作
+          # 是 `sha256sum -c SHA256SUMS.txt`——sha256sum 按行读，行尾多出来的 \r 会被
+          # 当成文件名的一部分，于是每一行都是「No such file or directory」，五个产物
+          # 全部 FAILED。产物本身没问题，坏的只是换行符，但用户看到的是「校验失败」，
+          # 而校验失败在发布语境里等同于「这个包被人动过手脚」。
+          $content = ($lines -join "`n") + "`n"
+          [System.IO.File]::WriteAllText("$PWD\SHA256SUMS.txt", $content, (New-Object System.Text.UTF8Encoding $false))
           Get-Content SHA256SUMS.txt
+          # 复核：文件里不允许出现任何 CR。
+          if ([System.IO.File]::ReadAllBytes("$PWD\SHA256SUMS.txt") -contains 13) {
+            throw "SHA256SUMS.txt 含有 CR，sha256sum -c 会全线报错"
+          }
 
       # 草稿发布：资产就位、正文空白，由人写完发布说明再手动 Publish。
       # generate_release_notes 关掉——自动生成的是提交列表，那是开发过程，不是给用户看的东西。

@@ -37,7 +37,12 @@ export async function setup(): Promise<() => Promise<void>> {
       // 只清本次运行创建的：比启动时间早的一律不碰
       const created = await stat(path).then((s) => Math.max(s.birthtimeMs, s.mtimeMs)).catch(() => 0);
       if (created < startedAt) continue;
-      if (await rm(path, { recursive: true, force: true }).then(() => true, () => false)) removed += 1;
+      // maxRetries 是 Node 专门为 Windows 留的口子：目录里还有被杀软扫描或索引服务
+      // 占着的句柄时，rm 会抛 ENOTEMPTY/EBUSY/EPERM，而这类占用通常只持续几百毫秒。
+      // 不重试的话，清扫会在最需要它的那一次（跑批刚结束、写入余波未平）恰好失败。
+      const ok = await rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+        .then(() => true, () => false);
+      if (ok) removed += 1;
     }
     if (removed > 0) console.log(`[vitest] 清理了 ${removed} 个本次运行残留的临时目录`);
   };

@@ -60,7 +60,11 @@ jobs:
       # 文件逐个列出，不用 *.yml 通配：那会把 builder-debug.yml（electron-builder 的配置
       # dump，纯调试残渣）一起传上去。latest.yml 和 .blockmap 必须留，前者是自动更新的
       # 版本清单，后者让升级只下差分而不是重下整包。
+      # 只有打 tag 才上传。workflow_dispatch 手动触发时跳过这一步，于是手动触发就是
+      # 一次纯粹的「打包能不能过」演练——CI 平时不打包，打包链路只在发布当天才第一次
+      # 执行，这条给了在那之前试跑的办法。
       - name: Upload draft release artifacts
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |

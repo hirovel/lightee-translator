@@ -1,0 +1,923 @@
+/* Lightee renderer 基础样式（终端撑满窗口，外框即 terminal 边框） */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.terminal {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.term-body {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+#stage {
+  width: 100%;
+  height: 100%;
+}
+
+/* ===== 真实章节编辑器：Obsidian 式全宽连续输入（作者校对） =====
+   拍板：宽度全宽锁定；字号/原文色/间距/术语提示/证据 → 设置项，默认「自然」档 */
+#chapter-editor-host.continuous-editor{
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 28px 44px 56px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: var(--cjk);
+  font-size: 18px;
+  color: var(--text);
+  line-height: 2;
+  position: relative;
+}
+/* 正常全文滚动：CM scroller 跟随内容高度，滚动发生在 host */
+#chapter-editor-host .cm-scroller{
+  overflow: visible;
+}
+/* ===== 查找 / 替换（Ctrl+F / Ctrl+H，面板见 editor/search-panel.ts）=====
+   面板**浮在编辑区右上角**：panels 容器高度归零、溢出可见，面板本身绝对定位，
+   因此它不占文档流——正文一行都不会被推走（作者实测默认面板正压着在读的段落）。 */
+#chapter-editor-host .cm-panels{
+  background: transparent;
+  border: 0;
+  color: var(--text);
+}
+/* 吸附偏移取宿主的上内边距（28px）：这样「未滚动」与「已吸附」两种状态下，
+   面板到宿主可视上沿的距离完全一致，滚动时不会自己跳一下。
+   面板本身再用 top:-26px 抵掉这段，最终贴在可视上沿下方 2px。 */
+#chapter-editor-host .cm-panels-top{
+  position: sticky;
+  top: 28px;
+  height: 0;
+  overflow: visible;
+  border-bottom: 0;
+  z-index: 6;
+}
+.lt-search{
+  position: absolute;
+  /* 负偏移把面板从内容框推回宿主的内边距区（上 28 / 右 44）。
+     右侧只推 28px：宿主是滚动容器，最右边那条约 15px 的滚动条压在内边距里，
+     推满会让面板半个身子藏到滚动条底下。 */
+  top: -26px;
+  right: -28px;
+  width: 214px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 7px;
+  background: color-mix(in srgb, var(--panel2, #232735) 96%, transparent);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.34);
+  backdrop-filter: blur(6px);
+  font-family: var(--ui, inherit);
+  animation: ltSearchIn .16s cubic-bezier(.2,.7,.3,1);
+}
+@keyframes ltSearchIn{
+  from{ opacity: 0; transform: translateY(-6px) scale(.985); }
+  to{ opacity: 1; transform: none; }
+}
+.lt-search-row{ display: flex; align-items: center; gap: 3px; }
+/* 替换行默认收起：多数时候只是找一找，替换是少数动作，不该常驻占位 */
+.lt-search-replace{ display: none; }
+.lt-search.lt-search-with-replace .lt-search-replace{ display: flex; animation: ltSearchIn .14s ease; }
+.lt-search-input{
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 7px;
+  background: var(--panel3, #1b1f2b);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.lt-search-input:focus{
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.lt-search-count{
+  flex: 0 0 auto;
+  min-width: 30px;
+  text-align: right;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lt-search-count.empty{ color: var(--red); }
+.lt-search-count.bump{ animation: ltCountBump .18s ease; }
+@keyframes ltCountBump{ 50%{ transform: translateY(-1px); opacity: .65; } }
+.lt-search-btn{
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--dimmer);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: color .12s ease, border-color .12s ease, background-color .12s ease;
+}
+.lt-search-btn:hover{ color: var(--accent); border-color: var(--border2); background: var(--panel); }
+.lt-search-btn.on{ color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.lt-search-close{ font-size: 13px; padding: 1px 6px; }
+/* 三个开关压成一条细带：常态只是灰字，选中才亮起来——它们是次要控制，不该和输入框争视线 */
+.lt-search-opts{ display: flex; gap: 2px; }
+.lt-search-opt{
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 0 4px; border-radius: 4px; line-height: 15px;
+  color: var(--dimmer); font-size: 9.5px; cursor: pointer;
+  border: 1px solid transparent;
+}
+.lt-search-opt:hover{ color: var(--dim); border-color: var(--border2); }
+.lt-search-opt input{ margin: 0; accent-color: var(--accent); width: 10px; height: 10px; }
+.lt-search-opt:has(input:checked){ color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* 命中高亮：其余命中低饱和描边，当前一处实心 + 一次性脉冲。
+   装饰元素每次换位都会重建，所以 animation 天然会重放一遍，指向哪里一眼看得见。 */
+#chapter-editor-host .cm-searchMatch{
+  background: color-mix(in srgb, var(--yellow) 16%, transparent);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yellow) 34%, transparent);
+}
+#chapter-editor-host .cm-searchMatch.cm-searchMatch-selected{
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: ltMatchPulse .5s ease-out;
+}
+@keyframes ltMatchPulse{
+  from{ background: color-mix(in srgb, var(--accent) 72%, transparent); }
+  to{ background: color-mix(in srgb, var(--accent) 34%, transparent); }
+}
+@media (prefers-reduced-motion: reduce){
+  .lt-search, .lt-search.lt-search-with-replace .lt-search-replace,
+  .lt-search-count.bump, #chapter-editor-host .cm-searchMatch.cm-searchMatch-selected{ animation: none; }
+}
+/* 移除 Chromium 对 contenteditable 的 UA focus 虚线框（cm-editor 聚焦时 dotted 1px outline） */
+#chapter-editor-host .cm-editor:focus,
+#chapter-editor-host .cm-editor.cm-focused,
+#chapter-editor-host .cm-editor:focus-visible,
+#chapter-editor-host .cm-content:focus,
+#chapter-editor-host .cm-content:focus-visible,
+#chapter-editor-host [contenteditable]:focus,
+#chapter-editor-host [contenteditable]:focus-visible{
+  outline: none !important;
+}
+#chapter-editor-host .cm-content{
+  padding: 0;
+  caret-color: var(--accent);
+}
+#chapter-editor-host .cm-line{
+  padding: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* 当前行高亮：自定义平滑色块（挂 .cm-scroller）——纯色极淡，滑动丝滑，不抢眼 */
+.lightee-smooth-active-line{
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  background-color: rgba(189,147,249,.07);
+  pointer-events: none;
+  will-change: transform, height;
+  z-index: 0;
+}
+
+/* ===== 空工作区导入引导（帮助建立首个章节，纯文字排版）===== */
+.ws-editor-loading,.ws-editor-error{
+  min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  color:var(--dim);font-size:13px;text-align:center;
+}
+.ws-editor-error strong{color:var(--text);font-size:15px}
+.ws-editor-error span{max-width:520px;color:var(--dimmer)}
+.ws-editor-error button{border:1px solid var(--border);background:var(--panel2);color:var(--text);padding:7px 12px;cursor:pointer}
+.ws-empty-guide{
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 40px 20px;
+  text-align: center;
+}
+.ws-empty-title{
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--cjk);
+  letter-spacing: .5px;
+}
+.ws-empty-sub{
+  font-size: 12px;
+  color: var(--dimmer);
+  margin-bottom: 22px;
+}
+.ws-empty-actions{
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ws-empty-btn{
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  font-family: var(--ui);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.ws-empty-btn:hover{
+  border-color: var(--accent);
+  color: var(--text);
+  background: rgba(189,147,249,.08);
+}
+.ws-empty-btn.primary{
+  background: rgba(189,147,249,.14);
+  border-color: rgba(189,147,249,.5);
+  color: var(--text);
+  font-weight: 500;
+}
+.ws-empty-btn.primary:hover{
+  background: rgba(189,147,249,.22);
+}
+.ws-empty-hint{
+  font-size: 11px;
+  color: var(--dimmer);
+  opacity: .75;
+}
+
+/* ===== 新建章节对话框 ===== */
+.nc-modal-overlay{
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.45);
+  backdrop-filter: blur(2px);
+}
+.nc-modal{
+  width: min(520px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 18px 48px rgba(0,0,0,.55);
+}
+.nc-modal-head{
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--cjk);
+}
+/* 对话框里的说明行：第一条常是路径，长路径要能断行而不是把弹窗撑破 */
+.nc-modal-note{
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--dim);
+  font-family: var(--cjk);
+  overflow-wrap: anywhere;
+}
+.nc-modal-note:first-of-type{ font-family: var(--mono); font-size: 11px; color: var(--dimmer); }
+.nc-field{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.nc-input{
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--cjk);
+  outline: none;
+}
+.nc-input:focus{
+  border-color: var(--accent);
+}
+.nc-textarea{
+  min-height: 160px;
+  resize: vertical;
+  line-height: 1.8;
+}
+.nc-modal-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.nc-btn{
+  padding: 8px 18px;
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  font-family: var(--ui);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.nc-btn:hover{
+  border-color: var(--accent);
+  color: var(--text);
+}
+.nc-btn.primary{
+  background: rgba(189,147,249,.15);
+  border-color: rgba(189,147,249,.55);
+  color: var(--text);
+  font-weight: 500;
+}
+.nc-btn.primary:hover{
+  background: rgba(189,147,249,.24);
+}
+
+/* ===== 原文编辑视图 textarea ===== */
+.source-edit-area{
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.9;
+  font-family: var(--jp);
+  outline: none;
+  resize: none;
+}
+.source-edit-area:focus{
+  border-color: var(--accent);
+}
+
+/* ===== 快捷键面板 ===== */
+.sc-overlay{
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.45); backdrop-filter: blur(2px);
+  opacity: 0; transition: opacity .18s ease;
+}
+.sc-overlay.open{opacity:1}
+.sc-panel{
+  width: min(460px, 92vw); max-height: 78vh; overflow: auto;
+  padding: 16px 20px 14px;
+  border: 1px solid var(--border2); border-radius: 12px;
+  background: var(--panel); box-shadow: 0 18px 48px rgba(0,0,0,.55);
+  transform: translateY(6px); transition: transform .2s cubic-bezier(.22,.8,.36,1);
+}
+.sc-overlay.open .sc-panel{transform:none}
+.sc-panel h3{font-size:13px;font-weight:600;color:var(--text);font-family:var(--cjk)}
+.sc-panel .sc-sub{font-size:10px;color:var(--dimmer);margin:1px 0 12px;font-family:var(--mono)}
+.sc-sec{margin-bottom:12px}
+.sc-sec:last-child{margin-bottom:2px}
+.sc-sec-title{font-size:10px;color:var(--dimmer);letter-spacing:.6px;margin-bottom:5px;font-family:var(--ui);opacity:.75}
+.sc-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:4px 2px;font-size:11px;color:var(--dim);font-family:var(--cjk);
+}
+.sc-row:hover{color:var(--text);background:rgba(189,147,249,.05)}
+.sc-keys{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.sc-keys .sc-or{color:#6272a4;font-size:9px;font-family:var(--mono)}
+kbd.sc-k{
+  display:inline-flex;align-items:center;padding:1px 6px;
+  border:1px solid var(--border2);border-bottom-width:2px;border-radius:4px;
+  background:var(--panel2);color:var(--text);font-family:var(--mono);
+  font-size:9px;line-height:1.6;
+}
+
+/* ===== 真实术语确认（阶段 B）· 对齐 demo term-workspace 视觉 ===== */
+.tw-confirm{height:100%;box-sizing:border-box;overflow:auto;padding:30px 36px 42px;max-width:1060px;margin:0 auto;color:var(--text);font-family:var(--cjk)}
+.tw-head{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;padding-bottom:20px;border-bottom:1px solid var(--border2)}
+.tw-kicker{display:block;color:var(--accent);font-size:11px;letter-spacing:1px;font-family:var(--ui)}
+.tw-head h2{margin-top:6px;font-size:21px;font-weight:600;line-height:1.35}
+.tw-head p{margin-top:8px;color:var(--dim);font-size:12px;line-height:1.65}
+.tw-count{display:flex;flex-direction:column;align-items:flex-end;flex:0 0 auto}
+.tw-count strong{color:var(--accent2);font:500 28px/1 var(--mono)}
+.tw-count span{margin-top:4px;color:var(--dim);font-size:11px}
+.tw-count small{margin-top:7px;color:var(--dimmer);font-size:10px}
+/* 工作流步骤（1 术语确认 → 2 整章翻译 → 3 作者修订） */
+.tw-steps{display:flex;align-items:center;gap:12px;padding:15px 0 18px;color:var(--dimmer);font-size:11px;font-family:var(--ui)}
+.tw-steps span{display:inline-flex;align-items:center;gap:6px}
+.tw-steps span.active{color:var(--accent)}
+.tw-steps b{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid var(--border2);border-radius:50%;font:500 10px/1 var(--mono)}
+.tw-steps span.active b{border-color:var(--accent);background:rgba(189,147,249,.12);color:var(--accent)}
+.tw-steps i{color:var(--border2);font-style:normal}
+/* 两栏：候选确认 + 右侧术语权威 */
+.tw-grid{display:grid;grid-template-columns:minmax(0,1.38fr) minmax(260px,.82fr);gap:28px}
+.tw-main,.tw-side{min-width:0;border-top:1px solid var(--border2)}
+.tw-side-title{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:13px 0 12px}
+.tw-side-title h3{margin-top:4px;font-size:15px;font-weight:600}
+.tw-side-title .tw-progress{color:var(--dimmer);font:11px var(--mono)}
+.tw-side-list{border-bottom:1px solid rgba(98,114,164,.42)}
+.tw-side-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(98,114,164,.3)}
+.tw-side-row:last-child{border-bottom:0}
+.tw-side-row span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.tw-side-row strong{font-size:12px;font-weight:500}
+.tw-side-row small{color:var(--dimmer);font-size:10px}
+.tw-side-row b{color:var(--green);font-size:12px;font-weight:500;text-align:right}
+.tw-side-empty{padding:15px 0;color:var(--dimmer);font-size:11px}
+/* 候选卡：accent 主题色边框 + 左缘强调条 + 底色 */
+.tw-card{margin-top:0;border:1px solid rgba(189,147,249,.45);border-left:3px solid var(--accent);background:rgba(189,147,249,.05);padding:20px 22px 18px;border-radius:0 12px 12px 0}
+.tw-ja{font-size:22px;font-weight:600;color:var(--text);display:flex;align-items:baseline;gap:10px}
+.tw-ja .tw-reading{color:var(--dimmer);font-size:13px;font-weight:400;font-family:var(--mono)}
+.tw-meta{display:flex;gap:8px;margin-top:8px}
+.tw-type{font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:10px;border:1px solid var(--border2);color:var(--dimmer)}
+.tw-ctx{margin-top:12px;padding:9px 10px;border-left:1px solid var(--border2);color:var(--dim);font-size:12px;line-height:1.7;background:transparent}
+.tw-ctx small{display:block;color:var(--dimmer);font-size:10px;margin-bottom:4px}
+/* 候选行：按钮式（对齐 demo term-candidate-option） */
+.tw-cands{margin-top:16px;display:grid;gap:7px}
+.tw-cand{
+  display:flex;align-items:center;gap:12px;min-height:43px;padding:7px 12px;
+  border:1px solid var(--border2);border-radius:3px;background:var(--panel2);cursor:pointer;
+  transition:border-color .15s,background .15s;
+}
+.tw-cand:hover{border-color:var(--accent);background:rgba(189,147,249,.08)}
+.tw-cand.sel{border-color:var(--accent);background:rgba(189,147,249,.12)}
+.tw-cand .tw-cand-mark{width:15px;height:15px;border-radius:50%;border:2px solid var(--border2);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:8px;color:transparent;transition:all .15s}
+.tw-cand.sel .tw-cand-mark{border-color:var(--accent);background:var(--accent);color:#1e2029}
+.tw-cand .tw-cand-zh{font-size:13px;font-weight:500;color:var(--text)}
+.tw-cand .tw-cand-conf{font-size:10px;font-family:var(--mono);color:var(--green);padding:1px 7px;border-radius:8px;background:rgba(80,250,123,.1)}
+.tw-cand .tw-cand-ev{font-size:10px;color:var(--dimmer);margin-left:auto;text-align:right;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.tw-note{margin-top:14px;padding:10px 14px;border:1px dashed rgba(241,248,140,.4);border-radius:8px;color:var(--yellow);font-size:12px;line-height:1.7}
+.tw-voice-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:15px;padding-top:13px;border-top:1px solid rgba(98,114,164,.5)}
+.tw-voice-fields label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.tw-voice-fields label span{color:var(--dim);font-size:10px}
+.tw-voice-fields input{box-sizing:border-box;width:100%;height:34px;padding:0 10px;border:1px solid var(--border2);border-radius:3px;background:var(--panel2);color:var(--text);font:12px var(--cjk);outline:none}
+.tw-voice-fields input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(189,147,249,.12)}
+.tw-voice-summary{display:grid;gap:8px;margin-top:14px;color:var(--dim);font-size:11px;line-height:1.65}
+.tw-voice-summary>span{display:grid;grid-template-columns:64px minmax(0,1fr);align-items:start;gap:8px;min-width:0;overflow-wrap:anywhere}
+.tw-voice-summary b{color:var(--dimmer);font-weight:500}
+.tw-voice-summary i{display:inline-block;margin:0 5px 4px 0;padding:1px 7px;border:1px solid var(--border2);border-radius:999px;color:var(--text);font-style:normal;line-height:1.45}
+.tw-evidence{margin-top:16px;padding-top:13px;border-top:1px solid rgba(98,114,164,.5)}
+.tw-evidence>strong{display:flex;align-items:baseline;gap:7px;margin-bottom:5px;color:var(--dim);font-size:11px;font-weight:500}
+.tw-evidence>strong small{color:var(--dimmer);font:10px var(--mono)}
+.tw-evidence blockquote{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;margin:0;padding:8px 0;border-bottom:1px solid rgba(98,114,164,.28);color:var(--dim);font-size:11px;line-height:1.65}
+.tw-evidence blockquote:last-of-type{border-bottom:0}
+.tw-evidence blockquote span{display:flex;align-items:center;justify-content:center;width:18px;height:18px;margin-top:1px;border:1px solid var(--border2);border-radius:50%;color:var(--dimmer);font:9px var(--mono)}
+.tw-evidence blockquote p{min-width:0;overflow-wrap:anywhere}
+.tw-evidence-empty{color:var(--yellow);font-size:11px;line-height:1.6}
+/* 自定义输入（对齐 demo term-candidate-custom） */
+.tw-input{margin-top:14px;padding-top:12px;border-top:1px solid rgba(98,114,164,.5);display:flex;gap:7px}
+.tw-input label{display:block;color:var(--dimmer);font-size:10px;margin-bottom:6px}
+.tw-input input{min-width:0;flex:1;height:32px;padding:0 10px;border:1px solid var(--border2);border-radius:3px;background:var(--panel2);color:var(--text);font:inherit;font-size:12px;outline:none}
+.tw-input input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(189,147,249,.12)}
+.tw-actions{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
+.tw-btn{min-height:34px;padding:6px 14px;border:1px solid var(--border2);border-radius:3px;background:transparent;color:var(--dim);font-size:12px;font-family:var(--cjk);cursor:pointer;transition:all .15s}
+.tw-btn:hover{border-color:var(--accent);color:var(--text);background:rgba(189,147,249,.08)}
+.tw-btn.primary{border-color:var(--accent);background:var(--accent);color:#1e2029;font-weight:600}
+.tw-btn.primary:hover{background:#d0b6f9;border-color:#d0b6f9}
+.tw-btn:disabled{opacity:.4;cursor:not-allowed;background:var(--panel2);border-color:var(--border2);color:var(--dimmer)}
+.tw-card-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;color:var(--dimmer);font-size:10px}
+/* 空态 / 完成态 */
+.tw-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:var(--dim);font-family:var(--cjk)}
+.tw-empty h2{font-size:20px;font-weight:600;color:var(--text)}
+.tw-empty p{font-size:12px;color:var(--dimmer);max-width:440px;line-height:1.8}
+.tw-empty .tw-empty-mark{width:44px;height:44px;border-radius:50%;border:1px solid var(--accent);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:8px}
+.tw-done{height:100%;display:flex;flex-direction:column;gap:16px;padding:30px 36px;max-width:1060px;margin:0 auto;overflow:auto}
+.tw-done .tw-done-head{display:flex;align-items:center;gap:12px}
+.tw-done h2{font-size:20px;font-weight:600}
+.tw-done .tw-done-mark{width:34px;height:34px;border-radius:50%;background:rgba(80,250,123,.14);border:1px solid rgba(80,250,123,.4);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:16px}
+.tw-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.tw-row{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:var(--panel);font-size:13px}
+.tw-row .tw-row-ja{font-weight:500}
+.tw-row .tw-row-ja small{color:var(--dimmer);font-weight:400;margin-left:6px;font-family:var(--mono);font-size:10px}
+.tw-row b{color:var(--accent);font-weight:500}
+.tw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:38px}
+.tw-toolbar span{color:var(--dimmer);font-size:11px;line-height:1.5}
+.tw-editable-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:14px;min-height:46px}
+.tw-editable-row .tw-row-ja{min-width:0;overflow-wrap:anywhere}
+/* 规则说明：贴在对应条目下方（内置正则规则光看 find/replace 读不出意图） */
+.tw-row-note{margin:-2px 0 2px;padding:7px 14px 9px;font-size:11px;line-height:1.65;color:var(--dim);border-left:2px solid var(--border2);background:rgba(255,255,255,.015);border-radius:0 6px 6px 0}
+.tw-editable-row b{min-width:0;overflow-wrap:anywhere}
+.tw-icon-btn{min-width:34px;min-height:30px;padding:4px 9px;border:1px solid var(--border2);border-radius:3px;background:transparent;color:var(--dim);font:12px var(--cjk);cursor:pointer}
+.tw-icon-btn:hover{border-color:var(--accent);color:var(--text)}
+/* 编辑 / 删除同居一格：行是三列网格，操作要占的是同一个第三列 */
+.tw-row-ops{display:flex;align-items:center;gap:6px}
+.tw-icon-btn.danger:hover{border-color:var(--red);color:var(--red)}
+.tw-icon-btn:focus-visible,.tw-term-form input:focus-visible,.tw-term-form select:focus-visible,.tw-term-form textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tw-term-form{padding:16px;border:1px solid var(--border2);border-radius:6px;background:var(--panel)}
+.tw-term-form[hidden]{display:none}
+.tw-form-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.tw-form-title strong{font-size:14px;font-weight:600}
+.tw-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tw-form-grid label{display:flex;flex-direction:column;gap:6px;color:var(--dim);font-size:11px}
+.tw-form-grid input,.tw-form-grid select,.tw-form-grid textarea{width:100%;min-height:36px;padding:7px 10px;border:1px solid var(--border2);border-radius:3px;background:var(--bg);color:var(--text);font:13px/1.5 var(--cjk)}
+.tw-form-grid textarea{resize:vertical}
+.tw-strategy-field{grid-column:1/-1}
+.tw-form-error{min-height:18px;margin-top:8px;color:var(--red);font-size:12px}
+.tw-list-empty{padding:24px;border:1px dashed var(--border2);color:var(--dimmer);font-size:12px;text-align:center}
+@media(max-width:760px){.tw-toolbar{align-items:flex-start;flex-direction:column}.tw-form-grid,.tw-voice-fields{grid-template-columns:1fr}.tw-strategy-field{grid-column:auto}.tw-editable-row{grid-template-columns:minmax(0,1fr) auto}.tw-editable-row b{grid-column:1/2}.tw-editable-row .tw-row-ops{grid-column:2;grid-row:1/3;flex-direction:column}}
+
+/* ===== 平滑光标（kitty 风格矩形滑动，替代 CM 原生光标） ===== */
+/* 启用时隐藏 CM 原生光标 */
+.lightee-hide-native-cursor .cm-cursor,
+.lightee-hide-native-cursor .cm-cursorPrimary,
+.lightee-hide-native-cursor .cm-cursorSecondary{
+  visibility: hidden !important;
+}
+/* drawSelection 撤掉之后，CM 不再自绘光标，浏览器的原生 caret 会露出来——
+   kitty 层已经画了一个，两个一起闪就成了双光标。自绘生效期间把原生的关掉；
+   关掉 kitty（cursorAnimate=off）时这个类会被移除，原生 caret 自动回来。 */
+.lightee-hide-native-cursor .cm-content{
+  caret-color: transparent;
+}
+/* 自绘光标 SVG 层 */
+.lightee-kitty-cursor-layer{
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+.lightee-kitty-cursor-layer[data-visible="false"]{
+  display: none;
+}
+/* 光标矩形本体：Dracula 紫（与 accent 一致），半透明可调 */
+.lightee-kitty-cursor-caret{
+  fill: rgba(189,147,249,.55);
+  stroke: none;
+}
+/* ===== 每段译文上方的日文原文（widget 装饰）：同字号、只读、完整换行 ===== */
+.cm-source-context-widget{
+  font-family: var(--jp);
+  font-size: inherit;
+  line-height: 1.9;
+  color: #5f6a70;
+  padding: 22px 0 4px;
+  user-select: none;
+  pointer-events: none;
+  white-space: normal;
+  word-break: break-word;
+}
+.cm-source-context-widget:first-child{padding-top: 0}
+/* 原文色：data-source-color 驱动 */
+#chapter-editor-host[data-source-color="dim"] .cm-source-context-widget{ color: #81999d; }
+#chapter-editor-host[data-source-color="soft"] .cm-source-context-widget{ color: #7b879c; }
+#chapter-editor-host[data-source-color="faint"] .cm-source-context-widget{ color: #5f6a70; }
+/* 当前段原文联动微亮（#2 sourceLink，可开关） */
+#chapter-editor-host[data-source-link="true"] .cm-source-context-widget.linked{
+  color: #b9bdd0;
+  text-shadow: 0 0 6px rgba(189,147,249,.25);
+}
+/* 段落间距：data-gap 驱动（原文与译文间距） */
+#chapter-editor-host[data-gap="tight"] .cm-source-context-widget{ padding: 10px 0 2px; }
+#chapter-editor-host[data-gap="natural"] .cm-source-context-widget{ padding: 22px 0 4px; }
+#chapter-editor-host[data-gap="loose"] .cm-source-context-widget{ padding: 34px 0 8px; }
+/* 术语提示样式：data-term-highlight 驱动。
+   两轮实测淘汰了两种做法：下划线 + 变色像超链接（读者会去点，而它并不可点）；
+   淡色底块把句子切成一格一格的方块，在中文密排正文里尤其碍眼。
+   这里回到排版本身的办法——只让字**偏一点色温**，不加任何几何。
+   正文近白、术语偏暖，扫读时一眼分得出，逐字阅读时又不打断行的连贯。
+   不动字重、不加内边距：两者都会挤动行内字距，对照阅读时看得出位移。 */
+#chapter-editor-host[data-term-highlight="highlight"] .lightee-term-hl{
+  color: color-mix(in srgb, var(--yellow) 78%, var(--text));
+  background: none;
+  box-shadow: none;
+  border-bottom: none;
+}
+/* 作者显式选了下划线才给下划线；仍用点线与更大偏移，与超链接拉开距离 */
+#chapter-editor-host[data-term-highlight="underline"] .lightee-term-hl{
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: color-mix(in srgb, var(--yellow) 55%, transparent);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+#chapter-editor-host[data-term-highlight="none"] .lightee-term-hl{
+  color: inherit;
+  text-decoration: none;
+  border-bottom: none;
+}
+#chapter-editor-host .cm-line{ position: relative; }
+/* 段落之间：自然间距，无分割线 */
+#chapter-editor-host .ce-translation-host{}
+/* ===== 原文显隐开关（小）：note 栏右侧，隐藏时 widget 全部消失 ===== */
+.toggle-src{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:2px 8px;
+  border:1px solid var(--border2);
+  border-radius:3px;
+  background:transparent;
+  color:var(--dim);
+  font-family:var(--mono);
+  font-size:9px;
+  letter-spacing:0;
+  line-height:1.6;
+  cursor:pointer;
+  transition:all .14s ease;
+}
+.toggle-src:hover{
+  border-color:var(--accent);
+  color:var(--text);
+}
+.toggle-src:focus-visible{
+  outline:none;
+  border-color:var(--accent);
+}
+.toggle-src .dot{
+  width:7px;
+  height:7px;
+  border-radius:2px;
+  background:var(--accent);
+  box-shadow:0 0 0 2px rgba(189,147,249,.12);
+  transition:all .14s ease;
+}
+.toggle-src.off .dot{
+  background:transparent;
+  box-shadow:none;
+  border:1px solid var(--border2);
+}
+/* 隐藏时：widget 全部消失 */
+#chapter-editor-host.hide-sources .cm-source-context-widget{ display:none; }
+
+/* ===== 术语终审（ADR-0008 / RS-2）：模型暂定词条的两来源一队列 ===== */
+.tw-provisional{margin:14px 0;padding:12px 14px;border:1px solid var(--border2);border-radius:8px;background:rgba(189,147,249,.05)}
+.tw-prov-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.tw-prov-head strong{font-size:12px;color:var(--accent)}
+.tw-prov-head span{font-size:10.5px;color:var(--dimmer)}
+.tw-prov-list{display:flex;flex-direction:column;max-height:300px;overflow:auto}
+.tw-prov-row{display:flex;align-items:center;gap:12px;padding:6px 4px;border-bottom:1px dashed var(--border2)}
+.tw-prov-row:last-child{border-bottom:none}
+.tw-prov-ja{flex:1 1 auto;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tw-prov-ja small{margin-left:8px;font-size:9.5px;color:var(--dimmer)}
+.tw-prov-zh{flex:0 1 auto;font-size:12px;color:var(--text)}
+.tw-prov-acts{flex:0 0 auto;display:flex;align-items:center;gap:6px}
+.tw-btn.tw-sm{min-height:24px;padding:2px 10px;font-size:11px}
+.tw-btn.tw-danger:hover{border-color:#f87171;color:#f87171;background:rgba(248,113,113,.08)}
+.tw-prov-input{width:140px;background:var(--panel2);border:1px solid var(--border2);border-radius:4px;padding:3px 8px;font-size:11.5px;color:var(--text);outline:none}
+.tw-prov-input:focus{border-color:var(--accent)}
+
+/* ===== 章节编辑器底栏 =====
+   它是状态栏，不是工具条——全程处在余光里，任何一处比正文抢眼都是设计事故。
+
+   三列，按重要性而不是对称分配：
+     左 身份（哪一章、多少段）——静态，锚在起始边
+     中 键盘参考——唯一可被牺牲的一列，独占全部余量
+     右 保存态——唯一会变的东西，锚在结束边，常驻
+   保存态常驻是这版的地基：它从前是 display 开关，一出现就把同排的挤开（每次自动
+   保存整条 bar 抖一下），其余时间又什么都不答。锚死在右端并且一直有话说之后，
+   左右两端都不再动。
+
+   不换行是硬约束。上一版让「跨段跳转，不停在空行」这种长标签自由换行，窄一点就把
+   38px 的状态条顶成两三行、文字互相压住。这里改成容器查询逐级减负：先摘标签、
+   再摘整组、最后整列让位，任何宽度下都只有一行。
+
+   padding / min-height / 断点全部留给 ui-shell.css 的既有规则——那三档
+   （48 / 32 / 16px）与上方的 note 条对齐，在这里重新声明只会把响应式打断。 */
+.continuous-editor-foot{
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 24px;
+}
+
+/* 章节号与段数：等宽 + 表格数字。段数会随编辑跳动，比例数字会让整行跟着晃 */
+.continuous-editor-foot .editor-foot-meta{
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.continuous-editor-foot .editor-foot-meta strong{ color: var(--dim); font-weight: 600; letter-spacing: .02em; }
+/* 分隔线永远不装内容。写死 overflow:hidden 是防再有代码把文字塞进来——
+   1px 宽的元素装不下字，字会溢出去盖在旁边的段数上，看着就是一层重影。 */
+.efoot-rule{
+  flex: 0 0 auto;
+  width: 1px;
+  height: 10px;
+  overflow: hidden;
+  background: var(--border2);
+  opacity: .55;
+}
+
+/* 键盘参考：键帽之间贴紧、标签紧跟本组、两组之间拉开——间距本身表达分组，
+   所以不需要 + 和 · 这类填充符号。溢出裁掉而不是换行，换行会撑破状态条。 */
+.continuous-editor-foot .editor-foot-shortcut{
+  gap: 18px;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--ui);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.efoot-key{ display: inline-flex; align-items: center; gap: 3px; }
+.efoot-label{ margin-left: 6px; color: var(--dimmer); }
+
+/* 键帽：这里的 kbd 是**参考信息**，不是可点的东西。全局 kbd 用 accent 色 + 2px
+   底边（那套是给可操作提示用的），照搬到状态栏会让一行里最亮的是三个紫方块。 */
+.continuous-editor-foot kbd{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 1;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--panel2) 78%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* 保存态。做成一枚常驻的状态片：圆点担色、文字担事实。
+   平时不烧色——一整天挂在眼角的绿字是噪音；只有出错时整片连文字带底一起转红，
+   那是唯一需要打断人的时刻。（从前这一格恒为 var(--green)，「保存失败」也是绿的。） */
+.continuous-editor-foot .save-hint{
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px 3px 9px;
+  font-family: var(--ui);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--dimmer);
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--panel2) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 999px;
+  transition: color .18s ease, background .18s ease, border-color .18s ease;
+}
+.continuous-editor-foot .save-hint::before{
+  content: "";
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border2);
+  transition: background .18s ease;
+}
+.continuous-editor-foot .save-hint[data-tone="ok"]{ color: var(--dim); }
+.continuous-editor-foot .save-hint[data-tone="ok"]::before{ background: var(--green); }
+.continuous-editor-foot .save-hint[data-tone="busy"]{ color: var(--dim); }
+.continuous-editor-foot .save-hint[data-tone="busy"]::before{
+  background: var(--yellow);
+  animation: efootPulse 1.15s ease-in-out infinite;
+}
+.continuous-editor-foot .save-hint[data-tone="error"]{
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border-color: color-mix(in srgb, var(--red) 34%, transparent);
+}
+.continuous-editor-foot .save-hint[data-tone="error"]::before{ background: var(--red); }
+
+/* 全条底栏唯一的一处动效，只在「正在写盘」时存在——它说的是有事在进行中 */
+@keyframes efootPulse{
+  0%, 100%{ opacity: 1; transform: scale(1); }
+  50%{ opacity: .4; transform: scale(.78); }
+}
+
+/* 窄容器逐级减负。摘的顺序＝重要性的倒序：解释性标签最先走，整条参考最后走，
+   身份与保存态任何宽度下都留着。 */
+@container (max-width: 660px){
+  .efoot-key[data-optional] .efoot-label{ display: none; }
+}
+@container (max-width: 520px){
+  .efoot-key[data-optional]{ display: none; }
+}
+@container (max-width: 360px){
+  .continuous-editor-foot .editor-foot-shortcut{ display: none; }
+}
+
+/* ===== Footer 主按钮：状态动画 =====
+   这颗按钮是整个应用唯一的「开始/停止」入口，它的三种状态必须一眼分得开：
+   静止（可以按）、跑批中（正在干活）、拦下（点不了）。
+   文案形变在 workspace-bridge 的 morphMainAct 里做，这里只管质感。 */
+.chip.main-act{
+  position: relative;
+  overflow: hidden;
+  /* 宽度由 morphMainAct 逐帧驱动，这里只兜住颜色与阴影的过渡 */
+  transition: background .18s ease, box-shadow .22s ease, transform .12s cubic-bezier(.2,.9,.3,1);
+  /* 此处**不要** will-change: transform。它会把按钮永久提升成独立合成层，
+     在 Windows 的 125%/150% 缩放下，层按自己的分辨率光栅化，文字发虚。
+     形变只发生在按下和一次短动画期间，合成器自己处理得了，不需要这个提示。 */
+}
+/* 按下去要有回应：先陷进去，松手带一点回弹（回弹靠 :not(:active) 的缓动完成） */
+.chip.main-act:active{ transform: scale(.955); transition-duration: .06s; }
+
+/* 跑批中：一道低调的光沿按钮扫过 + 边缘呼吸。
+   刻意不改底色——底色一闪一闪会让人以为出错了，而这是「正常进行中」。 */
+.chip.main-act.is-running{ animation: mainActBreathe 2.4s ease-in-out infinite; }
+.chip.main-act.is-running::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--bg) 55%, transparent) 48%, transparent 76%);
+  animation: mainActSweep 1.9s cubic-bezier(.45,0,.25,1) infinite;
+}
+@keyframes mainActSweep{
+  from{ transform: translateX(-130%); }
+  to{ transform: translateX(230%); }
+}
+@keyframes mainActBreathe{
+  0%, 100%{ box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 42%, transparent); }
+  50%{ box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 0%, transparent), 0 0 10px 1px color-mix(in srgb, var(--accent) 30%, transparent); }
+}
+
+/* 拦下的状态不该看起来「正在忙」——两者都不能按，但原因完全不同 */
+.chip.main-act.blocked{ animation: none; cursor: default; }
+.chip.main-act.blocked::after{ content: none; }
+
+/* 无障碍设置优先于观感：关掉一切持续动画，只留即时的状态切换 */
+@media (prefers-reduced-motion: reduce){
+  .chip.main-act,
+  .chip.main-act.is-running{ animation: none; transition: background .18s ease; }
+  .chip.main-act:active{ transform: none; }
+  .chip.main-act.is-running::after{ content: none; }
+}
+
+/* ===== 章节列表：飞行中的状态点呼吸 =====
+   这一列同时表示「已完成 ✔ / 待翻译 ◇ / 正在翻译 ◉」。三个都是静止字符时，
+   作者要靠右边那行小字才能分辨哪一章此刻真的在动——而这正是他最想一眼确认的事。
+   幅度刻意小：侧栏可能同时有几十行，任何大动作都会变成一片闪烁。 */
+.item .ch-state-mark{ display: inline-block; }
+.item .ch-state-mark.live{
+  animation: chStateBreathe 1.9s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes chStateBreathe{
+  0%, 100%{ opacity: .42; transform: scale(.82); }
+  50%{ opacity: 1; transform: scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce){
+  .item .ch-state-mark.live{ animation: none; opacity: 1; }
+}
+
+/* ===== 进入工作区：装配期不可见，装完一次性揭幕 =====
+   装配要落地十多次可见变更（stage/侧栏重画、tab 翻转、标题栏与侧栏各自异步到达、
+   面板从加载中换成编辑器）。顺序本身没问题，问题是把装配过程演给了作者看。
+   幕布用 opacity——display/visibility 会影响布局与可测量性，而装配途中有代码要量几何。 */
+/* 幕布落着时必须同时挡掉指针：opacity:0 的界面仍然可点，
+   落在看不见的控件上的点击会在装配中途重入渲染（护栏抓过一次实例）。 */
+#stage.ws-mounting{ opacity: 0; pointer-events: none; }
+#stage.ws-mounted{ animation: stageReveal .26s cubic-bezier(.16,1,.3,1) both; }
+@keyframes stageReveal{
+  from{ opacity: 0; }
+  to{ opacity: 1; }
+}
+/* 一次编排好的入场，三个动作错开几十毫秒依次落位：
+   侧栏从左轻推入 → 正文上浮落定 → 底栏最后淡入。
+   全部只动 opacity/transform（合成器路径），不动 scale/blur——缩放和模糊都会让文字发虚。 */
+#stage.ws-mounted .side{ animation: sideReveal .34s cubic-bezier(.16,1,.3,1) both; }
+#stage.ws-mounted #bpanel{ animation: panelReveal .4s cubic-bezier(.16,1,.3,1) .05s both; }
+#stage.ws-mounted .footer{ animation: stageReveal .3s ease-out .12s both; }
+@keyframes sideReveal{
+  from{ opacity: 0; transform: translateX(-7px); }
+  to{ opacity: 1; transform: none; }
+}
+@keyframes panelReveal{
+  from{ opacity: 0; transform: translateY(6px); }
+  to{ opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce){
+  #stage.ws-mounted,
+  #stage.ws-mounted .side,
+  #stage.ws-mounted #bpanel,
+  #stage.ws-mounted .footer{ animation: none; }
+}

@@ -1,0 +1,978 @@
+{
+  "schemaVersion": 1,
+  "title": "Lightee Electron Wiring",
+  "subtitle": "Frontend → preload → main → engine/filesystem",
+  "purpose": "This map is the source of truth for the desktop application's cross-layer connections and the completed Ticket 20 → Ticket 21 / FLOW-01 release gates.",
+  "layers": [
+    {
+      "id": "renderer",
+      "label": "Frontend · renderer",
+      "kind": "frontend"
+    },
+    {
+      "id": "preload",
+      "label": "Security seam · preload",
+      "kind": "seam"
+    },
+    {
+      "id": "main",
+      "label": "Backend · Electron main",
+      "kind": "backend"
+    },
+    {
+      "id": "shared",
+      "label": "Shared contracts/adapters",
+      "kind": "shared"
+    },
+    {
+      "id": "engine",
+      "label": "Engine",
+      "kind": "engine"
+    },
+    {
+      "id": "filesystem",
+      "label": "Workspace/filesystem",
+      "kind": "storage"
+    }
+  ],
+  "statuses": [
+    {
+      "id": "implemented",
+      "label": "Implemented",
+      "color": "green"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "renderer-shell",
+      "layer": "renderer",
+      "label": "Renderer shell + prototype UI",
+      "status": "implemented",
+      "tickets": [
+        "01"
+      ],
+      "paths": [
+        "apps/electron/renderer/src/main.ts",
+        "apps/electron/renderer/public/ui-shell-runtime.js"
+      ],
+      "interface": "Mounts the default design-shell workbench and the isolated verification routes."
+    },
+    {
+      "id": "renderer-ipc-client",
+      "layer": "renderer",
+      "label": "Typed IPC client",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "paths": [
+        "apps/electron/renderer/src/ipc/client.ts"
+      ],
+      "interface": "Typed invoke/event result mapping and the review-rule adapter; no Node or arbitrary channel access."
+    },
+    {
+      "id": "codemirror-editor",
+      "layer": "renderer",
+      "label": "CodeMirror 6 paragraph editor",
+      "status": "implemented",
+      "tickets": [
+        "05"
+      ],
+      "paths": [
+        "apps/electron/renderer/src/editor/paragraph-document.ts",
+        "apps/electron/renderer/src/editor/paragraph-editor.ts",
+        "apps/electron/renderer/src/editor/editor-prototype.ts",
+        "apps/electron/renderer/src/editor/kitty-cursor-trail.ts",
+        "apps/electron/renderer/src/editor/focus-mode.ts"
+      ],
+      "interface": "Paragraph-backed continuous text, structural transaction annotations, independent source/translation history, Kitty cursor overlay, and shared-paragraph focus decorations."
+    },
+    {
+      "id": "preload-bridge",
+      "layer": "preload",
+      "label": "Whitelist bridge",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "paths": [
+        "apps/electron/preload.js"
+      ],
+      "interface": "Exposes invoke, named event subscriptions, ping, and flushPendingWrites only."
+    },
+    {
+      "id": "main-router",
+      "layer": "main",
+      "label": "Electron IPC router",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "paths": [
+        "apps/electron/main.js"
+      ],
+      "interface": "Owns ipcMain handlers, broadcasts serializable events, drains writes before window destruction."
+    },
+    {
+      "id": "ipc-contract",
+      "layer": "shared",
+      "label": "Versioned IPC contract + validator",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "paths": [
+        "apps/electron/shared/ipc-contract.ts"
+      ],
+      "interface": "Versioned envelope, command/request/response maps, event map, runtime payload validation."
+    },
+    {
+      "id": "ipc-service",
+      "layer": "shared",
+      "label": "IpcService application adapter",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "paths": [
+        "apps/electron/shared/ipc-service.ts"
+      ],
+      "interface": "Workspace/session registry, revision checks, draft/source/term/settings/review-rule persistence, event emission."
+    },
+    {
+      "id": "atomic-adapter",
+      "layer": "shared",
+      "label": "Atomic file adapter",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "paths": [
+        "apps/electron/shared/atomic-file.ts",
+        "packages/core/src/atomic-fs.ts"
+      ],
+      "interface": "Per-file mutation queue plus tmp-write/fsync/rename replacement."
+    },
+    {
+      "id": "engine-adapter",
+      "layer": "engine",
+      "label": "Translation/review/import engine",
+      "status": "implemented",
+      "tickets": [
+        "02",
+        "07",
+        "14",
+        "16",
+        "20"
+      ],
+      "paths": [
+        "packages/engine/src/workspace.ts",
+        "packages/engine/src/import-pipeline.ts",
+        "packages/engine/src/translate-one.ts",
+        "packages/engine/src/review-one.ts"
+      ],
+      "interface": "Main-owned adapters call engine import, translate, review, confirm and export operations; automated runs inject fake LLMs."
+    },
+    {
+      "id": "workspace-files",
+      "layer": "filesystem",
+      "label": "Workspace files + revisions",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "paths": [
+        "workspace/book.yaml",
+        "workspace/source/",
+        "workspace/translations/",
+        "workspace/state/ipc-revisions.json",
+        "workspace/review-rules.json"
+      ],
+      "interface": "Main-owned writes for drafts, translations, source corrections, terms, settings, checkpoints and review rules."
+    },
+    {
+      "id": "editor-persistence",
+      "layer": "filesystem",
+      "label": "Editor persistence/autosave",
+      "status": "implemented",
+      "tickets": [
+        "12",
+        "19"
+      ],
+      "paths": [
+        "apps/electron/renderer/src/editor/autosave.ts",
+        "apps/electron/shared/ipc-service.ts"
+      ],
+      "interface": "Autosave, checkpoints and source corrections use current workspace/chapter context with revision protection."
+    }
+  ],
+  "edges": [
+    {
+      "id": "ui-to-client",
+      "from": "renderer-shell",
+      "to": "renderer-ipc-client",
+      "status": "implemented",
+      "tickets": [
+        "02",
+        "09",
+        "17",
+        "19"
+      ],
+      "label": "UI commands and save-state mapping",
+      "detail": "The default workbench routes commands through the typed client and current workspace/chapter context."
+    },
+    {
+      "id": "editor-to-persistence",
+      "from": "codemirror-editor",
+      "to": "renderer-ipc-client",
+      "status": "implemented",
+      "tickets": [
+        "05",
+        "12",
+        "19"
+      ],
+      "label": "Paragraph changes → saveDraft",
+      "detail": "CodeMirror transactions feed context-bound autosave and revision-protected chapter persistence."
+    },
+    {
+      "id": "client-to-preload",
+      "from": "renderer-ipc-client",
+      "to": "preload-bridge",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "label": "window.lightee.invoke / onEvent",
+      "detail": "The renderer receives a small typed surface; ipcRenderer is never exposed."
+    },
+    {
+      "id": "preload-to-main",
+      "from": "preload-bridge",
+      "to": "main-router",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "label": "lightee:invoke / lightee:event / lightee:flush",
+      "detail": "Main validates every envelope and serializes all event payloads, including reviewRules.changed."
+    },
+    {
+      "id": "main-to-contract",
+      "from": "main-router",
+      "to": "ipc-contract",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "label": "validateEnvelope + typed maps",
+      "detail": "Version 1 envelope and command allowlist are shared by main and renderer typecheck."
+    },
+    {
+      "id": "main-to-service",
+      "from": "main-router",
+      "to": "ipc-service",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "label": "IpcService.invoke",
+      "detail": "Service returns IpcResult and emits chapter/workspace/terms plus canonical terminology.changed events."
+    },
+    {
+      "id": "service-to-atomic",
+      "from": "ipc-service",
+      "to": "atomic-adapter",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "label": "queued atomic JSON writes",
+      "detail": "Drafts, settings, terms, source corrections, checkpoints and review rules use main-owned writes."
+    },
+    {
+      "id": "atomic-to-files",
+      "from": "atomic-adapter",
+      "to": "workspace-files",
+      "status": "implemented",
+      "tickets": [
+        "02"
+      ],
+      "label": "tmp + fsync + rename",
+      "detail": "Revision metadata prevents stale saves from overwriting newer disk state."
+    },
+    {
+      "id": "service-to-engine",
+      "from": "ipc-service",
+      "to": "engine-adapter",
+      "status": "implemented",
+      "tickets": [
+        "02",
+        "07",
+        "14",
+        "16",
+        "20"
+      ],
+      "label": "translate/review/import commands",
+      "detail": "IPC service invokes the engine adapters, injects persisted review rules into custom-rule checks, emits progress, persists staging/reports, and promotes only approved output."
+    },
+    {
+      "id": "service-to-editor-files",
+      "from": "ipc-service",
+      "to": "editor-persistence",
+      "status": "implemented",
+      "tickets": [
+        "12",
+        "19"
+      ],
+      "label": "autosave/checkpoint lifecycle",
+      "detail": "The editor invokes saveDraft/checkpoint and source-correction persistence before chapter switching or window flush."
+    }
+  ],
+  "channels": [
+    {
+      "id": "invoke",
+      "name": "lightee:invoke",
+      "direction": "renderer → preload → main",
+      "status": "implemented",
+      "payload": "IpcEnvelope v1",
+      "response": "IpcResult<T>",
+      "path": "apps/electron/shared/ipc-contract.ts",
+      "notes": "Command allowlist and runtime validation execute in main."
+    },
+    {
+      "id": "event",
+      "name": "lightee:event",
+      "direction": "main → preload → renderer",
+      "status": "implemented",
+      "payload": "IpcEvent v1",
+      "response": "unsubscribe()",
+      "path": "apps/electron/preload.js",
+      "notes": "Only named events in IPC_EVENT_NAMES are forwarded."
+    },
+    {
+      "id": "flush",
+      "name": "lightee:flush",
+      "direction": "renderer → preload → main",
+      "status": "implemented",
+      "payload": "none",
+      "response": "FlushResult",
+      "path": "apps/electron/shared/ipc-service.ts",
+      "notes": "Used before Electron window destruction; timeout is handled by main."
+    }
+  ],
+  "commands": [
+    {
+      "name": "workspace.open/list/create/close",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "workspace metadata and open registry",
+      "events": [
+        "workspace.changed"
+      ]
+    },
+    {
+      "name": "import.preview",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "none",
+      "events": []
+    },
+    {
+      "name": "import.run",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "engine importFile (txt/epub)",
+      "writes": "source/*, manifest.json",
+      "events": [
+        "workspace.changed"
+      ]
+    },
+    {
+      "name": "chapter.load",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "none",
+      "events": []
+    },
+    {
+      "name": "chapter.saveDraft",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "state/drafts + translations + ipc-revisions",
+      "events": [
+        "chapter.saved",
+        "chapter.saveFailed"
+      ]
+    },
+    {
+      "name": "chapter.checkpoint",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "state/checkpoints",
+      "events": []
+    },
+    {
+      "name": "chapter.loadSourceCorrection/saveSourceCorrection",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "state/source-corrections",
+      "events": [
+        "chapter.saveFailed"
+      ]
+    },
+    {
+      "name": "translate.run",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service → engine runChapterPipeline → runPipeline",
+      "writes": "state/chapter_state.json + state/events.jsonl + staging/promotion journal + approved translation",
+      "events": [
+        "chapter.stateChanged",
+        "translate.progress",
+        "review.progress"
+      ],
+      "notes": "FLOW-01 makes the shared Orchestrator/state machine authoritative; chapter.load reads the complete locked snapshot, approved export is durable-state gated, and automated tests inject a fake llm."
+    },
+    {
+      "name": "review.run",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service → engine reviewChapter",
+      "reads": "current approved/staging chapter content and review rules",
+      "writes": "review report history only; no chapter workflow transition",
+      "events": [
+        "review.progress"
+      ],
+      "notes": "Report-only review remains separate from translate.run and does not promote staging or change chapter state."
+    },
+    {
+      "name": "confirm.list/decide",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "engine confirm-session + TerminologyRepository",
+      "writes": "state/cards.json + confirm-session.json + canonical terminology snapshot + legacy projections",
+      "events": [
+        "terminology.changed",
+        "terms.changed"
+      ],
+      "notes": "Confirmation commits are idempotent repository operations with a workspace-wide revision; legacy archive files are compatibility projections."
+    },
+    {
+      "name": "terms.query/update/delete/restore",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service + TerminologyRepository",
+      "reads": "state/terminology-snapshot.json (legacy archive files are migration/projection inputs only)",
+      "writes": "terms.* -> canonical snapshot + legacy projections + state/term-trash + terminology-wide revision",
+      "events": [
+        "terminology.changed",
+        "terms.changed"
+      ],
+      "notes": "terms.query returns one snapshot-consistent deterministic page with archive-qualified rows; pages after the first require baseRevision and conflict on snapshot changes. terms.update/delete/restore remain terms.json-only and require the canonical baseRevision."
+    },
+    {
+      "name": "reviewRules.read/add/update/delete",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "review-rules.json + ipc-revisions",
+      "events": [
+        "reviewRules.changed"
+      ],
+      "notes": "Default route loads the current workspace snapshot; mutations require baseRevision and use atomic writes."
+    },
+    {
+      "name": "export.run",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "engine exportChapter (md/txt/epub)",
+      "writes": "output/*",
+      "events": []
+    },
+    {
+      "name": "settings.read/write",
+      "status": "implemented",
+      "front": "renderer-ipc-client",
+      "back": "ipc-service",
+      "writes": "config.json + ipc-revisions",
+      "events": []
+    },
+    {
+      "name": "dialog.pickDirectory",
+      "status": "implemented",
+      "front": "workspace-prototype / IpcWorkspaceAdapter",
+      "back": "ipc-service + main.js Electron dialog",
+      "writes": "none (native directory picker)",
+      "events": []
+    }
+  ],
+  "tickets": [
+    {
+      "id": "01",
+      "title": "Renderer architecture/build",
+      "status": "done",
+      "dependsOn": [],
+      "paths": [
+        "apps/electron/vite.config.ts",
+        "apps/electron/renderer/src/main.ts"
+      ]
+    },
+    {
+      "id": "02",
+      "title": "IPC contract",
+      "status": "done",
+      "dependsOn": [
+        "01"
+      ],
+      "paths": [
+        "apps/electron/shared/ipc-contract.ts",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/preload.js"
+      ]
+    },
+    {
+      "id": "05",
+      "title": "CodeMirror 6 + CJK IME prototype",
+      "status": "done",
+      "dependsOn": [
+        "01"
+      ],
+      "paths": [
+        "apps/electron/renderer/src/editor/paragraph-document.ts",
+        "apps/electron/renderer/src/editor/paragraph-editor.ts"
+      ],
+      "caveat": "Synthetic Chrome CDP composition passed for Chinese/Japanese commit/cancel. OS-level Windows IME popup was not invoked."
+    },
+    {
+      "id": "07",
+      "title": "Export/settings GUI",
+      "status": "done",
+      "dependsOn": [
+        "02",
+        "09",
+        "12"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/07-export-settings-gui.md",
+        "apps/electron/renderer/src/editor/settings.ts",
+        "apps/electron/renderer/src/editor/export.ts"
+      ],
+      "caveat": "Settings and export IPC paths are wired; the default workbench uses the current workspace/chapter target. EPUB export remains outside the desktop TXT release gate."
+    },
+    {
+      "id": "08",
+      "title": "Kitty cursor trail",
+      "status": "done",
+      "dependsOn": [
+        "05"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/08-kitty-cursor-trail.md",
+        "apps/electron/renderer/src/editor/kitty-cursor-trail.ts"
+      ],
+      "caveat": "Synthetic Chrome CDP composition passed; OS-level Windows IME popup was not invoked."
+    },
+    {
+      "id": "09",
+      "title": "Continuous editor UI",
+      "status": "done",
+      "dependsOn": [
+        "08"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/09-continuous-editor-ui.md",
+        "apps/electron/renderer/src/editor/editor-prototype.ts",
+        "apps/electron/renderer/styles/editor-ui-shell.css"
+      ],
+      "caveat": "The isolated route remains a prototype validation surface; the default workbench uses the context-bound editor and persistence path."
+    },
+    {
+      "id": "10",
+      "title": "Focus/alignment",
+      "status": "done",
+      "dependsOn": [
+        "09"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/10-focus-mode-alignment.md",
+        "apps/electron/renderer/src/editor/focus-mode.ts"
+      ],
+      "caveat": "Focus preference persistence is deferred to settings/autosave tickets."
+    },
+    {
+      "id": "11",
+      "title": "Shortcuts panel",
+      "status": "done",
+      "dependsOn": [
+        "09"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/11-shortcuts-panel.md",
+        "apps/electron/renderer/src/editor/shortcuts.ts"
+      ],
+      "caveat": "Find/replace actions open the discovery panel as a placeholder; real search UI is deferred with the real export/settings work."
+    },
+    {
+      "id": "12",
+      "title": "Autosave/settings",
+      "status": "done",
+      "dependsOn": [
+        "09"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/12-autosave-settings.md",
+        "apps/electron/renderer/src/editor/autosave.ts",
+        "apps/electron/renderer/src/ipc/client.ts"
+      ],
+      "caveat": "Context-bound draft, checkpoint and source-correction persistence are covered by Ticket 19; isolated settings preference coverage remains unit-test scoped."
+    },
+    {
+      "id": "13",
+      "title": "Responsive/transitions",
+      "status": "done",
+      "dependsOn": [
+        "12"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/13-responsive-editor-transitions.md",
+        "apps/electron/renderer/styles/editor-ui-shell.css"
+      ],
+      "caveat": "View transition timing verified by CDP class/timing assertions; pixel-level motion rendering not diffed."
+    },
+    {
+      "id": "14",
+      "title": "Review/editor bridge",
+      "status": "done",
+      "dependsOn": [
+        "09"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/14-review-editor-bridge.md",
+        "apps/electron/renderer/src/editor/review-view.ts"
+      ],
+      "caveat": "The isolated route keeps synthetic review fixtures for editor interaction coverage; the default workbench receives real review output through Ticket 20."
+    },
+    {
+      "id": "15",
+      "title": "Context terms panel",
+      "status": "done",
+      "dependsOn": [
+        "09"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/15-context-terms-panel.md",
+        "apps/electron/renderer/src/editor/terms-store.ts",
+        "apps/electron/renderer/src/editor/terms-panel.ts"
+      ],
+      "caveat": "The isolated route keeps seeded terms for interaction coverage; the default workbench hydrates per-workspace terms and confirmation state through Ticket 20."
+    },
+    {
+      "id": "03",
+      "title": "Workspace management GUI",
+      "status": "done",
+      "dependsOn": [
+        "01"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/03-workspace-gui.md",
+        "apps/electron/renderer/src/workspace/workspace-store.ts",
+        "apps/electron/renderer/src/workspace/workspace-prototype.ts"
+      ],
+      "caveat": "The isolated route remains for workspace interaction coverage; the default workbench uses the real tree and session path from Tickets 17/18."
+    },
+    {
+      "id": "04",
+      "title": "Term confirmation GUI",
+      "status": "done",
+      "dependsOn": [
+        "02"
+      ],
+      "paths": [
+        ".scratch/electron-map/tickets/04-confirm-gui.md",
+        "apps/electron/renderer/src/editor/confirm-store.ts",
+        "apps/electron/renderer/src/editor/confirm-drawer.ts"
+      ],
+      "caveat": "The isolated route keeps seeded cards for interaction coverage; the default workbench hydrates and decides the real confirmation session through Ticket 20."
+    },
+    {
+      "id": "16",
+      "title": "Real engine wiring",
+      "status": "done",
+      "dependsOn": [
+        "02",
+        "07"
+      ],
+      "paths": [
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/main-ipc.ts",
+        "packages/engine/src/index.ts",
+        "packages/engine/tsconfig.build.json"
+      ],
+      "caveat": "import/export/confirm/review run against the real engine in tests and Electron smoke; translate.run is wired with a real LLM runtime (reads ~/.pi/agent/models.json) but automated runs inject a fake llm — a real paid call requires explicit user confirmation."
+    },
+    {
+      "id": "17",
+      "title": "Desktop workbench context merge",
+      "status": "complete",
+      "dependsOn": ["03", "09", "16"],
+      "paths": [
+        ".scratch/electron-map/tickets/17-desktop-workbench-context.md",
+        "apps/electron/renderer/src/main.ts",
+        "apps/electron/renderer/src/workspace/workbench-context.ts",
+        "apps/electron/renderer/src/workspace/workbench-prototype.ts",
+        "apps/electron/renderer/src/workspace/workspace-prototype.ts",
+        "apps/electron/renderer/src/editor/editor-prototype.ts",
+        "apps/electron/renderer/styles/workbench-ui-shell.css",
+        "docs/desktop-visual-contract.md"
+      ],
+      "caveat": "Default no-query product entry is the design-shell desktop workbench; variant and isolated prototype routes are supplementary verification only."
+    },
+    {
+      "id": "18",
+      "title": "Real workspace tree and session persistence",
+      "status": "complete",
+      "dependsOn": ["03", "16", "17"],
+      "paths": [
+        ".scratch/electron-map/tickets/18-real-workspace-tree-session.md",
+        "apps/electron/renderer/src/workspace/workspace-store.ts",
+        "apps/electron/shared/ipc-contract.ts",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/shared/workspace-registry.test.ts",
+        "apps/electron/main-ipc.ts",
+        "apps/electron/scripts/verify-release-ipc.mjs"
+      ],
+      "caveat": "User-level registry is stored under Electron userData; workspace session and metadata remain inside each workspace."
+    },
+    {
+      "id": "19",
+      "title": "Real chapter loading and editor persistence",
+      "status": "complete",
+      "dependsOn": ["12", "17", "18"],
+      "paths": [
+        ".scratch/electron-map/tickets/19-real-chapter-editor-persistence.md",
+        "apps/electron/renderer/src/editor/editor-prototype.ts",
+        "apps/electron/renderer/src/editor/chapter.ts",
+        "apps/electron/renderer/src/editor/autosave.ts",
+        "apps/electron/renderer/src/ipc/client.ts",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/scripts/verify-release-ipc.mjs"
+      ],
+      "caveat": "Real chapter hydration, draft/source-correction persistence, revision conflicts and protected desktop chapter switching are covered. Ticket 20 only closes the remaining review result UI and human decision path."
+    },
+    {
+      "id": "20",
+      "title": "Real review, terms, confirmation, and actions",
+      "status": "complete",
+      "dependsOn": ["04", "07", "14", "15", "16", "19"],
+      "paths": [
+        ".scratch/electron-map/tickets/20-real-review-terms-actions.md",
+        "apps/electron/renderer/src/editor/review-view.ts",
+        "apps/electron/renderer/src/editor/terms-panel.ts",
+        "apps/electron/renderer/src/editor/confirm-drawer.ts"
+      ],
+      "caveat": "Default-route workflow status, approved-only reveal/export, stuck human decision, and immutable review-history summaries are covered; automated tests inject a fake LLM."
+    },
+    {
+      "id": "21",
+      "title": "Desktop vertical slice verification gate",
+      "status": "complete",
+      "dependsOn": ["17", "18", "19", "20"],
+      "paths": [
+        ".scratch/electron-map/tickets/21-desktop-vertical-slice-gate.md",
+        "apps/electron/scripts/verify-release-ipc.mjs",
+        "apps/electron/shared/ipc-service.test.ts"
+      ],
+      "caveat": "Production Electron TXT + Markdown release gate passed with restart/reopen, approved/stuck workflow paths, zero runtime exceptions, and zero console errors; mobile polish, real LLM calls and deep EPUB checks stay out of scope."
+    },
+    {
+      "id": "22",
+      "title": "Real light-novel EPUB fixture",
+      "status": "complete",
+      "dependsOn": ["16", "18", "21"],
+      "paths": [
+        ".scratch/electron-map/tickets/22-epub-real-light-novel-fixture.md",
+        "packages/core/src/epub-parse.ts",
+        "packages/core/test/epub-real-fixture.test.ts",
+        "packages/engine/src/import-pipeline.ts",
+        "packages/engine/test/epub-real-fixture.test.ts"
+      ],
+      "caveat": "Real Chinese collection and Japanese single-volume EPUB are external fixtures; both core parsing and engine workspace-import tests pass. Translation quality stays in the TXT gate; deeper cross-language/layout checks are optional follow-up."
+    },
+    {
+      "id": "23",
+      "title": "Default visible entry bridge",
+      "status": "complete",
+      "dependsOn": ["17", "18"],
+      "paths": [
+        ".scratch/electron-map/tickets/23-default-visible-entry-bridge.md",
+        "apps/electron/renderer/src/workspace/workbench-prototype.ts",
+        "apps/electron/renderer/src/workspace/workspace-prototype.ts"
+      ],
+      "caveat": "Welcome actions call the real workspace handle and never replace the workbench with legacy enterWorkbench/show behavior."
+    },
+    {
+      "id": "24",
+      "title": "Real start without demo data",
+      "status": "complete",
+      "dependsOn": ["23"],
+      "paths": [
+        ".scratch/electron-map/tickets/24-real-start-onboarding-no-demo.md",
+        "renderer/shell/ui-shell.html",
+        "apps/electron/renderer/src/workspace/workbench-prototype.ts"
+      ],
+      "caveat": "The existing workspace card is reused; invalid recent/session rows and static demo identifiers are hidden or removed on the default route."
+    },
+    {
+      "id": "25",
+      "title": "Persisted review-rule management",
+      "status": "complete",
+      "dependsOn": ["20", "23"],
+      "paths": [
+        ".scratch/electron-map/tickets/25-persist-review-rules.md",
+        "apps/electron/shared/ipc-contract.ts",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/renderer/src/ipc/client.ts",
+        "apps/electron/renderer/public/ui-shell-runtime.js",
+        "packages/engine/src/review-one.ts"
+      ],
+      "caveat": "Default route reads and mutates the current workspace review-rules.json through revision-protected IPC; variant routes may retain in-memory seed rules."
+    },
+    {
+      "id": "26",
+      "title": "Default workbench user acceptance",
+      "status": "ready",
+      "dependsOn": ["21", "24", "25"],
+      "paths": [
+        ".scratch/electron-map/tickets/26-default-workbench-user-acceptance.md",
+        "apps/electron/scripts/verify-release-ui.mjs"
+      ],
+      "caveat": "Automated release coverage is expanded; direct human acceptance of the real workbench remains a separate user decision."
+    },
+    {
+      "id": "27",
+      "title": "Resizable shell, settings collapse, and Chinese title",
+      "status": "complete",
+      "dependsOn": ["23", "24"],
+      "paths": [
+        ".scratch/electron-map/tickets/27-resizable-shell-settings-title.md",
+        "apps/electron/renderer/styles/renderer.css",
+        "apps/electron/renderer/styles/workbench-ui-shell.css",
+        "renderer/shell/ui-shell.html"
+      ],
+      "caveat": "Desktop visual harness covered 1280x800, 1024x700 and 820x620; temporary screenshots were removed after inspection."
+    },
+    {
+      "id": "28",
+      "title": "Workspace create field validation",
+      "status": "complete",
+      "dependsOn": ["18", "23", "24"],
+      "paths": [
+        ".scratch/electron-map/tickets/28-workspace-create-validation.md",
+        "apps/electron/renderer/src/workspace/workspace-prototype.ts",
+        "apps/electron/scripts/verify-release-ui.mjs"
+      ],
+      "caveat": "Empty name and empty path are rejected in the current dialog before IPC; valid creation remains covered by the production release gate."
+    },
+    {
+      "id": "29",
+      "title": "Empty workspace open state",
+      "status": "complete",
+      "dependsOn": ["23", "24", "28"],
+      "paths": [
+        ".scratch/electron-map/tickets/29-empty-workspace-open-state.md",
+        "apps/electron/renderer/src/workspace/workspace-prototype.ts",
+        "apps/electron/renderer/src/workspace/workbench-prototype.ts",
+        "apps/electron/renderer/styles/workbench-ui-shell.css",
+        "renderer/shell/ui-shell.html",
+        "apps/electron/scripts/verify-release-ui.mjs"
+      ],
+      "caveat": "Empty workspaces stay visible as opened workspace state and show waiting-for-import status; chapter-bearing workspaces still enter the editor."
+    },
+    {
+      "id": "30",
+      "title": "Production runtime isolation",
+      "status": "complete",
+      "dependsOn": ["29"],
+      "paths": [
+        ".scratch/electron-map/tickets/30-production-runtime-isolation.md",
+        "apps/electron/renderer/src/components/ui-shell-runtime.ts",
+        "apps/electron/renderer/src/workspace/workbench-prototype.ts"
+      ]
+    },
+    {
+      "id": "31",
+      "title": "Terminology CRUD authority",
+      "status": "complete",
+      "dependsOn": ["30"],
+      "paths": [
+        ".scratch/electron-map/tickets/31-terminology-crud-authority.md",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/renderer/src/editor/terms-store.ts"
+      ]
+    },
+    {
+      "id": "32",
+      "title": "Terminology confirmation gate",
+      "status": "complete",
+      "dependsOn": ["31"],
+      "paths": [
+        ".scratch/electron-map/tickets/32-terminology-confirmation-gate.md",
+        "packages/engine/src/cli-pipeline.ts",
+        "packages/engine/src/confirm-session.ts",
+        "apps/electron/renderer/src/editor/confirm-drawer.ts"
+      ]
+    },
+    {
+      "id": "33",
+      "title": "Terminology multi-archive query",
+      "status": "complete",
+      "dependsOn": ["32"],
+      "paths": [
+        ".scratch/electron-map/tickets/33-terminology-multi-archive-query.md",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/renderer/src/editor/terms-panel.ts"
+      ]
+    },
+    {
+      "id": "34",
+      "title": "Terminology revision and event authority",
+      "status": "complete",
+      "dependsOn": ["33"],
+      "paths": [
+        ".scratch/electron-map/tickets/34-terminology-revision-event-unification.md",
+        "packages/core/src/terminology-repository.ts",
+        "packages/engine/src/confirm-session.ts",
+        "packages/engine/src/cli-pipeline.ts",
+        "apps/electron/shared/ipc-contract.ts",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/renderer/src/editor/editor-prototype.ts",
+        "apps/electron/scripts/verify-release-ipc.mjs"
+      ],
+      "caveat": "Canonical terminology snapshot, workspace lock/queue, idempotent commits, revision-token pagination, external event polling, renderer convergence, malformed projection recovery, and multi-archive restart coverage are complete. Root QA-01 workspace scope and intermittent Electron sandbox startup diagnostics remain separate follow-up items."
+    },
+    {
+      "id": "35",
+      "title": "Canonical persisted chapter pipeline",
+      "status": "complete",
+      "dependsOn": ["34"],
+      "paths": [
+        ".scratch/electron-map/tickets/35-flow-01-canonical-persisted-chapter-pipeline.md",
+        "packages/core/src/chapter-state.ts",
+        "packages/engine/src/orchestrator.ts",
+        "packages/engine/src/chapter-pipeline.ts",
+        "apps/electron/shared/ipc-service.ts",
+        "apps/electron/renderer/src/editor/editor-prototype.ts",
+        "apps/electron/renderer/src/state/workflow-state.ts",
+        "apps/electron/scripts/verify-release-ipc.mjs",
+        "apps/electron/scripts/verify-release-ui.mjs"
+      ],
+      "caveat": "Electron translate.run delegates to the shared Orchestrator, chapter snapshots/events are durable, promotion recovery is journaled under a dedicated chapter lock, renderer state is snapshot/event driven, and fake-LLM approved/stuck/restart release gates pass. FLOW-02/03/04 and QA-01 remain subsequent work."
+    }
+  ]
+}

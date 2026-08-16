@@ -1,0 +1,304 @@
+#!/usr/bin/env node
+/**
+ * 轻小译 CLI 入口。
+ * 用法: lightee translate <workspace|book.txt> [--confirm]
+ */
+import { runTranslate } from "../packages/engine/src/cli-pipeline.ts";
+import { createWorkspace } from "../packages/engine/src/workspace.ts";
+import { importTxtBook } from "../packages/engine/src/txt-import.ts";
+import { LlmRuntime } from "../packages/engine/src/llm-runtime.ts";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const args = process.argv.slice(2);
+const cmd = args[0] ?? "help";
+const target = resolve(args[1] ?? ".");
+const confirm = args.includes("--confirm");
+
+async function main() {
+  if (cmd === "help" || cmd === "--help") {
+    console.log(`轻小译 Lightee — 轻小说多 Agent 翻译引擎
+
+用法:
+  lightee translate <book.txt> [--confirm]   导入并翻译
+  lightee translate <workspace> [--confirm]  继续已有工作区
+  lightee confirm <workspace>                逐项确认术语（决策卡）
+  lightee tui <workspace>                    打开 TUI 工作台
+  lightee help                               帮助`);
+    return;
+  }
+  if (cmd === "confirm") {
+    const { loadSession, createSession, currentCard, verdict, finishSession, parseAction, renderCard, saveSession } = await import(
+      "../packages/engine/src/confirm-session.ts"
+    );
+    const { createInterface } = await import("node:readline/promises");
+    const wsRoot = resolve(target);
+    const ws = { root: wsRoot };
+
+    let session = await loadSession(ws);
+    if (!session) {
+      // 无会话但有卡片 → 从 cards.json 创建会话（断点续跑/首次确认）
+      const { readFileSync } = await import("node:fs");
+      const cardsPath = join(wsRoot, "state", "cards.json");
+      if (existsSync(cardsPath)) {
+        const cards = JSON.parse(readFileSync(cardsPath, "utf-8"));
+        session = await createSession({ root: wsRoot }, cards);
+      } else {
+        console.error("没有待确认的决策卡（先运行 lightee translate 生成）");
+        process.exit(1);
+      }
+    }
+
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    console.log(`\n${session.cards.length} 项术语待确认 — [数字] 选候选 [m 译名] 自定义 [s] 跳过 [b] 后退 [q] 退出保存进度\n`);
+
+    while (true) {
+      const card = currentCard(session);
+      if (!card) {
+        console.log("\n全部确认完成 ✅");
+        break;
+      }
+      console.log(renderCard(card, session.index, session.cards.length));
+      const line = (await rl.question("❯ ")).trim();
+      if (line === "q") {
+        console.log(`进度已保存（${session.index}/${session.cards.length}）— 运行 lightee confirm 继续`);
+        rl.close();
+        process.exit(0);
+      }
+      if (line === "b") {
+        if (session.index > 0) {
+          session.index -= 1;
+          session.verdicts.pop();
+          await saveSession({ root: wsRoot }, session);
+        }
+        continue;
+      }
+      const action = parseAction(line, card);
+      if (!action) {
+        console.log("  ✗ 无法识别，输入 [1-9] / m 译名 / s / b / q");
+        continue;
+      }
+      await verdict(ws, session, action);
+      console.log("");
+    }
+    rl.close();
+    const applied = await finishSession(ws, session);
+    console.log(`✅ 已确认 ${applied.length} 项 → terminology/（下次 translate --confirm 直接使用）`);
+    return;
+  }
+  if (cmd === "tui") {
+    const { runTui } = await import("../packages/engine/src/tui.ts");
+    let tuiRuntime = null;
+    const { readFileSync, existsSync } = await import("node:fs");
+    const wsRoot = resolve(target);
+    // 读 manifest 显示章节
+    let chapters = [];
+    const manifestPath = join(wsRoot, "source", "manifest.json");
+    if (existsSync(manifestPath)) {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+      chapters = manifest.chapters.map((c) => ({ id: c.id, title: c.title, state: "imported" }));
+    }
+    if (chapters.length === 0) {
+      console.error("工作区没有章节（先运行 lightee translate <book.txt>）");
+      process.exit(1);
+    }
+    await runTui(chapters, {
+      workspacePath: wsRoot,
+      loadTranslation: async (chapterId) => {
+        const p = join(wsRoot, "translations", `${chapterId}_zh.md`);
+        return existsSync(p) ? readFileSync(p, "utf-8") : null;
+      },
+      translateAll: async (ids, onEvent) => {
+        const { runPipeline } = await import("../packages/engine/src/orchestrator.ts");
+        const { translateChapterToFile } = await import("../packages/engine/src/translate-one.ts");
+        const { reviewChapter } = await import("../packages/engine/src/review-one.ts");
+        const { readSettings } = await import("../packages/engine/src/settings-store.ts");
+        const { managerDecide } = await import("../packages/engine/src/manager-agent.ts");
+        if (!tuiRuntime) tuiRuntime = await LlmRuntime.create();
+        const settings = await readSettings({ root: wsRoot });
+        const config = {
+          project: { name: "tui", srcLang: "ja", tgtLang: "zh" },
+          agents: {},
+          translation: { mode: "balanced", concurrency: 1, batchChars: 2000, quoteStyle: settings.quoteStyle, guide: settings.translation?.guide },
+        };
+        // 模型真实窗口（settings 显式设置优先，否则读模型配置——1M 等真实值）
+        const trModel = config.agents.translator?.model ?? "deepseek/deepseek-v4-flash";
+        config.translation.contextWindow =
+          settings.translation?.contextWindow ??
+          tuiRuntime.getModel(trModel)?.contextWindow ??
+          131072;
+        const complete = async (system, user) => {
+          const res = await tuiRuntime.complete("deepseek/deepseek-v4-flash", [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ], { thinking: "high" });
+          return res.text;
+        };
+        return runPipeline({
+          chapterIds: ids,
+          terminologyConfirmed: true,
+          translate: async (id, opts) => {
+            onEvent(`Translator: ${id} 翻译中…${opts.retryNote ? "（重译）" : ""}`);
+            const r = await translateChapterToFile({ root: wsRoot }, id, tuiRuntime, config, opts.retryNote);
+            onEvent(`Translator: ${id} 完成（${r.charCount} 字符）`);
+            return { translation: r.translation, drifts: [], pendingTerms: [] };
+          },
+          review: async (revIds) => {
+            onEvent(`Reviewer: ${revIds.join(", ")} 审校中…`);
+            const all = [];
+            for (const id of revIds) {
+              const r = await reviewChapter({ root: wsRoot }, id, {
+                quoteStyle: settings.quoteStyle,
+                llm: {
+                  complete: async (sys, user) => {
+                    const model = config.agents.reviewer?.model ?? 'deepseek/deepseek-v4-flash';
+                    const res = await tuiRuntime.complete(model, [
+                      { role: 'system', content: sys },
+                      { role: 'user', content: user },
+                    ], { thinking: config.agents.reviewer?.thinking ?? 'medium' });
+                    return res.text;
+                  },
+                },
+              });
+              for (const i of r.issues) all.push({
+                id: `${id}-${i.type}-${all.length}`,
+                type: i.type,
+                severity: i.severity,
+                chapterId: id,
+                found: i.found,
+                dialogueSafe: true,
+                suggestedAction: i.severity === "high" ? "revise_chapter" : "ignore",
+                evidence: [],
+              });
+            }
+            if (all.length > 0) onEvent(`Reviewer: ${all.length} 个问题`);
+            return { issues: all };
+          },
+          manager: {
+            decide: async (type, payload) => {
+              onEvent(`Manager: 仲裁中…`);
+              return managerDecide(complete, type, payload);
+            },
+          },
+          onStateChange: (id, from, to, detail) => {
+            onEvent(`状态: ${id} ${from} → ${to}${detail ? "（" + detail + "）" : ""}`);
+          },
+        });
+      },
+      loadSource: async (chapterId) => {
+        const { readFileSync, existsSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const manifest = JSON.parse(readFileSync(join(wsRoot, "source", "manifest.json"), "utf-8"));
+        const meta = manifest.chapters.find((c) => c.id === chapterId);
+        const p = meta?.volume ? join(wsRoot, "source", meta.volume, chapterId + ".md") : join(wsRoot, "source", chapterId + ".md");
+        return existsSync(p) ? readFileSync(p, "utf-8") : "";
+      },
+      translate: async (chapterId) => {
+        // 真实翻译：LlmRuntime + translateChapterToFile（术语/digest/puns 全上下文）
+        const { LlmRuntime } = await import("../packages/engine/src/llm-runtime.ts");
+        const { translateChapterToFile } = await import("../packages/engine/src/translate-one.ts");
+        const { readSettings } = await import("../packages/engine/src/settings-store.ts");
+        if (!tuiRuntime) tuiRuntime = await LlmRuntime.create();
+        const settings = await readSettings({ root: wsRoot });
+        const config = {
+          project: { name: "tui", srcLang: "ja", tgtLang: "zh" },
+          agents: {},
+          translation: { mode: "balanced", concurrency: 1, batchChars: 2000, quoteStyle: settings.quoteStyle },
+        };
+        const r = await translateChapterToFile({ root: wsRoot }, chapterId, tuiRuntime, config);
+        return { translation: r.translation };
+      },
+      previewImport: async (path) => {
+        const { previewImport } = await import("../packages/engine/src/import-pipeline.ts");
+        return previewImport(path);
+      },
+      importFile: async (path, volumeId) => {
+        const { importFile } = await import("../packages/engine/src/import-pipeline.ts");
+        const m = await importFile(path, { root: wsRoot }, { volumeId });
+        return { chapters: m.chapters };
+      },
+      beginStep: async (volumeId) => {
+        const { beginStep } = await import("../packages/engine/src/import-pipeline.ts");
+        const s = await beginStep({ root: wsRoot }, { volumeId });
+        return { volumeId: s.volumeId, volumeLabel: s.volumeLabel };
+      },
+      finishStep: async (volumeId, chapters) => {
+        const { finishStep } = await import("../packages/engine/src/import-pipeline.ts");
+        const session = { volumeId, volumeLabel: volumeId, chapters };
+        const m = await finishStep({ root: wsRoot }, session);
+        return { chapters: m.chapters };
+      },
+      reviewChapter: async (chapterId) => {
+        const { reviewChapter } = await import("../packages/engine/src/review-one.ts");
+        const { readSettings } = await import("../packages/engine/src/settings-store.ts");
+        const settings = await readSettings({ root: wsRoot });
+        return reviewChapter({ root: wsRoot }, chapterId, { quoteStyle: settings.quoteStyle });
+      },
+      exportChapter: async (target, format) => {
+        const { exportChapter } = await import("../packages/engine/src/export-one.ts");
+        return exportChapter({ root: wsRoot }, target, format);
+      },
+      exportProgress: async () => {
+        const { exportProgress } = await import("../packages/engine/src/export-one.ts");
+        return exportProgress({ root: wsRoot });
+      },
+      settings: {
+        read: async () => {
+          const { readSettings } = await import("../packages/engine/src/settings-store.ts");
+          return readSettings({ root: wsRoot });
+        },
+        write: async (key, value) => {
+          const { writeSetting } = await import("../packages/engine/src/settings-store.ts");
+          return writeSetting({ root: wsRoot }, key, value);
+        },
+      },
+      readClipboard: async () => {
+        const { readClipboard } = await import("../packages/engine/src/import-pipeline.ts");
+        return readClipboard();
+      },
+    });
+    return;
+  }
+  if (cmd !== "translate") {
+    console.error(`未知命令: ${cmd}（试试 lightee help）`);
+    process.exit(1);
+  }
+
+  const runtime = await LlmRuntime.create();
+  let ws;
+  if (existsSync(join(target, "book.yaml"))) {
+    ws = { root: target }; // 已有工作区
+  } else if (target.endsWith(".txt")) {
+    ws = await createWorkspace(join(process.cwd(), "workspace"), { name: target });
+    await importTxtBook(target, ws);
+  } else {
+    console.error("需要 book.txt 或已有工作区目录");
+    process.exit(1);
+  }
+
+  const config = {
+    project: { name: "book", srcLang: "ja", tgtLang: "zh" },
+    agents: {
+      terminologist: { model: "deepseek/deepseek-v4-flash", thinking: "max" },
+      translator: { model: "deepseek/deepseek-v4-flash", thinking: "high" },
+      reviewer: { model: "deepseek/deepseek-v4-flash", thinking: "max" },
+      orchestrator: { model: "deepseek/deepseek-v4-flash", thinking: "high" },
+    },
+    translation: { mode: "balanced", concurrency: 3, batchChars: 2000 },
+  };
+
+  console.log(`轻小译 — 翻译开始 (${confirm ? "术语已确认" : "先提取术语"})`);
+  const result = await runTranslate({ workspace: ws, config, llm: runtime, terminologyConfirmed: confirm });
+
+  if (result.pendingConfirmation) {
+    console.log(`\n⚠️ 术语表已生成（${result.terminologyCount} 条），请在 terminology/ 审阅后运行: lightee translate <workspace> --confirm`);
+  } else {
+    console.log(`\n✅ approved: ${result.approved.join(", ")}`);
+    if (result.stuck.length) console.log(`⚠️ stuck: ${result.stuck.join(", ")}`);
+  }
+}
+
+main().catch((e) => {
+  console.error("❌", e.message);
+  process.exit(1);
+});

@@ -1,0 +1,22 @@
+{
+  "name": "@lightee/engine",
+  "version": "0.10.0",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.83.0",
+    "@earendil-works/pi-tui": "0.83.0",
+    "@lightee/core": "workspace:*"
+  },
+  "devDependencies": {
+    "jszip": "^3.10.1",
+    "vitest": "^2.1.9"
+  }
+}

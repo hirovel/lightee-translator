@@ -1,0 +1,253 @@
+/* Agent 控制台 v2 时间线（docs/llm-result-view.html 设计稿落地）
+ * 结果视图：时间线 + 可读摘要；Debug 视图：完整 prompt / response / thinking。 */
+
+/* 竖向留白：各区块此前紧贴（gap:0），加上轨迹带后一屏里五个区块首尾相接，
+   读不出分组。10px 的统一间隔配合各区块自己的内衬，形成「块内紧、块间松」的节奏。 */
+.agent-panel{display:flex;flex-direction:column;gap:10px;padding:20px 24px;height:100%;min-height:0;font-family:var(--ui,--font);overflow:hidden}
+
+/* ===== 标题 + 模型/思考控制 + 简略 Debug 开关 ===== */
+.agent-console-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.agent-console-title{margin:0;min-width:0;font-size:15px;line-height:1.3;font-weight:650;color:var(--text);letter-spacing:0}
+/* 模型与思考并成**一枚分段控件**。
+   两者回答的是同一个问题——「这一次跑批用什么」——各自带一圈描边摆在标题行里，
+   看起来就是散落的表单控件。合成一枚之后：外壳担边框与底色，内部靠一道细分隔线
+   断开，控件本身去掉描边。整行的视觉重量从三块降到一块。
+   （从前这里还有一个装三个档位的折叠浮层。术语档没有消费者、审校档的功能入口是关的，
+   只剩翻译一档时，折叠就是多一次点击才够得到一个下拉，因此摊平。） */
+.agent-model-pick{
+  display:flex;align-items:center;gap:0;flex:0 1 auto;min-width:0;
+  padding:2px;
+  border:1px solid var(--border2);border-radius:9px;
+  background:var(--panel2);
+  transition:border-color .18s ease,box-shadow .18s ease;
+}
+.agent-model-pick:hover{border-color:var(--border)}
+/* 组内任一控件拿到键盘焦点，整枚亮起。落在哪一段由各段自己的 focus-visible 再标一次，
+   这一圈负责先答「焦点在这一组里」——只标内层的话，焦点在窄下拉上很难被一眼找到。 */
+.agent-model-pick:focus-within{border-color:var(--mgr,#a78bfa);box-shadow:0 0 0 3px color-mix(in srgb,var(--mgr,#a78bfa) 16%,transparent)}
+.agent-model-pick .amp-item{display:flex;align-items:center;gap:6px;min-width:0;padding:0 2px;white-space:nowrap}
+/* 字段名压到最暗：它是常量，每次真正要读的是它右边那个值 */
+.amp-key{padding-left:8px;font-size:9.5px;color:var(--dimmer);letter-spacing:.04em}
+/* 分隔线两端留白，读起来是「分组」而不是「切断」 */
+.amp-sep{align-self:stretch;width:1px;margin:4px 6px;background:var(--border2)}
+.agent-model-pick select{
+  appearance:none;-webkit-appearance:none;
+  box-sizing:border-box;min-width:0;max-width:180px;
+  padding:4px 22px 4px 6px;
+  border:0;border-radius:6px;
+  background-color:transparent;
+  color:var(--text);font-family:inherit;font-size:10.5px;
+  cursor:pointer;outline:none;
+  /* 自绘折角箭头。原生下拉箭头是系统灰，在深色主题里和这一行的其余部分对不上，
+     而且两个下拉挨着时，两枚系统箭头会成为整行最抢眼的东西。 */
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 12px) calc(50% - 1px),calc(100% - 8px) calc(50% - 1px);
+  background-size:4px 4px;background-repeat:no-repeat;
+  transition:background-color .16s ease,color .16s ease;
+}
+.agent-model-pick select:hover{background-color:var(--border)}
+.agent-model-pick select:focus-visible{outline:2px solid var(--mgr,#a78bfa);outline-offset:-1px}
+.agent-model-pick select:disabled{color:var(--dimmer);cursor:default;background-color:transparent}
+/* 展开的选项列表由系统绘制，不给底色的话某些 Windows 主题下会是白底黑字 */
+.agent-model-pick select option{background:var(--panel2);color:var(--text)}
+/* 标定入口：「（未探测）」的出口必须就在标记旁边。
+   平时压暗成组内第三段，悬停才亮出可点的样子——它是偶尔用一次的动作，
+   不该和两个每次都要看的下拉抢注意力。 */
+.amp-probe{
+  margin-left:2px;padding:4px 10px;
+  border:0;border-radius:6px;
+  background:transparent;color:var(--dimmer);
+  font-family:inherit;font-size:9.5px;letter-spacing:.04em;white-space:nowrap;cursor:pointer;
+  transition:background .16s ease,color .16s ease;
+}
+.amp-probe:hover{color:var(--text);background:color-mix(in srgb,var(--mgr,#a78bfa) 18%,transparent)}
+.amp-probe:focus-visible{outline:2px solid var(--mgr,#a78bfa);outline-offset:-1px}
+.amp-probe:disabled{opacity:.55;cursor:default;background:transparent;color:var(--dimmer)}
+/* 轨迹带（UI-9）：结构借鉴 deepseek-harness 的 trajectory 查看器（分轨时间线 +
+   等宽/真实时长切换 + 搜索过滤 + 底部统计条）；配色走本应用调色板，不照搬其色值 */
+.agent-trace{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--panel2)}
+.agent-trace-bar{display:flex;align-items:center;gap:8px}
+.atb-mode{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:2px 9px;font-size:10px;color:var(--dim);cursor:pointer;white-space:nowrap}
+.atb-mode:hover{color:var(--text);border-color:var(--dim)}
+.atb-search{margin-left:auto;flex:0 1 180px;min-width:90px;background:rgba(0,0,0,.2);border:1px solid var(--border2);border-radius:6px;padding:2px 8px;font-size:10.5px;color:var(--text);outline:none}
+.atb-search:focus{border-color:var(--accent)}
+.agent-trace-band{display:flex;flex-direction:column;gap:3px}
+.atb-row{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:6px}
+.atb-lab{font-size:9.5px;color:var(--dimmer)}
+.atb-track{position:relative;height:12px;border-radius:3px;background:rgba(0,0,0,.22);overflow:hidden}
+.atb-seg{position:absolute;top:2px;bottom:2px;border-radius:2px;cursor:pointer;background:color-mix(in srgb,var(--accent) 65%,transparent)}
+.atb-seg.tool{background:color-mix(in srgb,var(--yellow) 55%,transparent)}
+.atb-seg.err{background:color-mix(in srgb,var(--red) 70%,transparent)}
+.atb-seg:hover{filter:brightness(1.35)}
+.atb-seg.dim{opacity:.14}
+.agent-trace-stats{font-size:10.5px;color:var(--dimmer);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-node.trace-flash .call{border-color:var(--accent);transition:border-color .2s ease}
+.debug-switch{appearance:none;position:relative;display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;margin:0;padding:3px 4px 3px 8px;background:transparent;border:1px solid transparent;border-radius:999px;color:var(--dimmer);font:inherit;cursor:pointer;user-select:none}
+.debug-switch .debug-check{position:absolute;opacity:0;width:0;height:0}
+.debug-switch .lbl{font-size:10px;line-height:1;color:inherit;letter-spacing:0}
+.debug-switch .switch{position:relative;width:28px;height:16px;border-radius:999px;background:var(--border2);transition:background .18s ease}
+.debug-switch .switch .knob{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--text);transition:transform .18s ease}
+.debug-check:checked ~ .switch{background:var(--mgr,#a78bfa)}
+.debug-check:checked ~ .switch .knob{transform:translateX(12px)}
+.debug-check:focus-visible ~ .switch{outline:2px solid var(--mgr,#a78bfa);outline-offset:2px}
+.debug-switch:hover{background:var(--panel2);color:var(--text)}
+
+/* ===== 当前活动：空闲时完全隐藏 ===== */
+.agent-live:not([hidden]){display:grid;gap:6px;padding:12px 0;border-bottom:1px solid var(--border)}
+.agent-live-row{display:grid;grid-template-columns:7px max-content minmax(0,1fr);align-items:start;gap:8px;font-size:11px;line-height:1.5;color:var(--dim)}
+.agent-live-row .as-dot{width:7px;height:7px;margin-top:5px;border-radius:50%;background:#fbbf24}
+.agent-live-row.failed .as-dot{background:#f87171}
+.agent-live-row b{font-weight:600;color:var(--text);white-space:nowrap}
+.agent-live-row span:last-child{min-width:0;overflow-wrap:anywhere}
+
+/* ===== 时间线 ===== */
+.agent-timeline{position:relative;padding:14px 4px 8px 84px;overflow:auto;flex:1;min-height:0}
+.agent-timeline::before{content:"";position:absolute;left:60px;top:6px;bottom:6px;width:1px;background:linear-gradient(180deg,var(--border2),var(--border) 60%,transparent)}
+.agent-node{position:relative;margin-bottom:14px}
+.agent-node .stamp{position:absolute;left:-84px;top:12px;width:46px;text-align:right;font-family:var(--mono,ui-monospace,Consolas,monospace);font-size:10px;color:var(--dimmer);line-height:1.3}
+.agent-node .stamp .sec{display:block}
+.agent-node .pulse{position:absolute;left:-30px;top:13px;width:11px;height:11px;border-radius:50%;border:2px solid var(--bg,var(--panel));z-index:1}
+.agent-node[data-a="manager"] .pulse{background:#a78bfa}
+.agent-node[data-a="translator"] .pulse{background:#5eead4}
+.agent-node[data-a="reviewer"] .pulse{background:#fbbf24}
+.agent-node[data-a="terminologist"] .pulse{background:#34d399}
+.agent-node[data-a="compiler"] .pulse{background:#f0abfc}
+.agent-node.err .pulse{background:#f87171}
+
+/* ===== 调用卡片 ===== */
+.agent-node .call{background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,.18);overflow:hidden;transition:border-color .15s,background .15s}
+.agent-node .call:hover{border-color:var(--border2);background:var(--panel2)}
+.agent-node .call.err{border-color:rgba(248,113,113,.4)}
+.agent-node .call .top{display:grid;grid-template-columns:8px minmax(118px,150px) minmax(180px,1fr) max-content;grid-template-areas:"grip who result meta";align-items:center;column-gap:14px;row-gap:8px;padding:13px 15px;cursor:pointer;user-select:none}
+.agent-node .call .top .grip{grid-area:grip;width:6px;height:6px;border-right:1px solid var(--dimmer);border-bottom:1px solid var(--dimmer);transform:rotate(-45deg);transition:transform .18s ease}
+.agent-node .call.open .top .grip{transform:rotate(45deg)}
+.agent-node .call .who{grid-area:who;display:flex;flex-direction:column;min-width:0}
+.agent-node .call .who .name{font-size:12px;line-height:1.45;font-weight:650;color:var(--text);overflow-wrap:anywhere}
+.agent-node[data-a="manager"] .call .who .name{color:#a78bfa}
+.agent-node[data-a="translator"] .call .who .name{color:#5eead4}
+.agent-node[data-a="reviewer"] .call .who .name{color:#fbbf24}
+.agent-node[data-a="terminologist"] .call .who .name{color:#34d399}
+.agent-node[data-a="compiler"] .call .who .name{color:#f0abfc}
+.agent-node .call .who .act{font-size:9.5px;color:var(--dimmer);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-node .call .result{grid-area:result;min-width:0;font-size:11px;color:var(--dim);line-height:1.55;white-space:normal;overflow-wrap:anywhere}
+.agent-node .call .result .k{color:var(--text);font-weight:600}
+.agent-node .call .result .hl{color:#5eead4}
+.agent-node .call.err .result{color:rgba(248,113,113,.9)}
+.agent-node .call .meta{grid-area:meta;display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:max-content;font-size:9.5px;color:var(--dimmer);font-family:var(--mono,ui-monospace,Consolas,monospace)}
+.agent-node .call .meta .pill{border:1px solid var(--border2);border-radius:5px;padding:1.5px 7px;background:var(--panel2);color:var(--dim);white-space:nowrap}
+.agent-node .call .meta .pill.thinking{color:#a78bfa;border-color:rgba(167,139,250,.35)}
+.agent-node .call .meta .pill.kind{border-color:rgba(248,113,113,.45);color:#f87171;background:rgba(248,113,113,.08)}
+
+/* ===== Debug 详情（默认隐藏，结果视图不可见） ===== */
+.agent-node .call .body{display:none;border-top:1px solid var(--border)}
+.agent-node .call.open .body{display:block}
+.agent-panel.debug .agent-node .call .body{display:block}
+.agent-node .dbg-note{padding:8px 14px;font-size:9.5px;color:var(--dimmer);background:var(--panel2);border-bottom:1px solid var(--border)}
+.agent-node .sec{border-bottom:1px solid var(--border)}
+.agent-node .sec:last-child{border-bottom:none}
+.agent-node .sec-head{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;user-select:none;font-size:10px;color:var(--dim);letter-spacing:.4px}
+.agent-node .sec-head:hover{background:var(--panel2)}
+.agent-node .sec-head .chev{width:5px;height:5px;border-right:1px solid var(--dimmer);border-bottom:1px solid var(--dimmer);transform:rotate(-45deg);transition:transform .15s}
+.agent-node .sec.open .sec-head .chev{transform:rotate(45deg)}
+.agent-node .sec-head .tag{font-size:9px;font-family:var(--mono,ui-monospace,Consolas,monospace);color:var(--dimmer);border:1px solid var(--border2);border-radius:4px;padding:0 6px}
+.agent-node .sec-head .count{margin-left:auto;font-family:var(--mono,ui-monospace,Consolas,monospace);font-size:9px;color:var(--dimmer)}
+.agent-node .sec-head .foldbtn{font-size:9.5px;color:#5eead4;border:1px solid rgba(94,234,212,.3);border-radius:4px;padding:0 8px;background:rgba(94,234,212,.06);cursor:pointer}
+.agent-node .sec-head .foldbtn:hover{background:rgba(94,234,212,.14)}
+.agent-node .sec-body{display:none;padding:0 14px 12px}
+.agent-node .sec.open .sec-body{display:block}
+.agent-node pre.code{box-sizing:border-box;font-family:var(--mono,ui-monospace,Consolas,monospace);font-size:10.5px;line-height:1.7;color:var(--dim);background:var(--panel3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-height:340px;overflow:auto;margin:0}
+.agent-node pre.code .role{color:#a78bfa;font-weight:600}
+.agent-node pre.code .r-usr{color:#5eead4}
+.agent-node pre.code.clamp{max-height:none;display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+.agent-node .morebtn{font-size:9.5px;color:#5eead4;cursor:pointer;margin-top:6px;display:inline-flex}
+.agent-node .morebtn:hover{text-decoration:underline}
+/* 输入折叠态：只露首行 */
+.agent-node .sec.inf .sec-body{padding-top:0}
+.agent-node .sec.inf pre.code{height:38px;min-height:38px;max-height:38px;padding:8px 10px;line-height:20px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;background:var(--panel2);border-style:dashed}
+.agent-node .sec.inf .morebtn{display:none}
+/* 错误 */
+.agent-node .sec[data-k="err"] .sec-body{display:block}
+.agent-node .errbox{background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 12px}
+.agent-node .errbox .t{font-size:11px;color:#f87171;font-weight:600;margin-bottom:5px}
+.agent-node .errbox .m{font-family:var(--mono,ui-monospace,Consolas,monospace);font-size:10.5px;color:rgba(248,113,113,.92);line-height:1.6;white-space:pre-wrap;word-break:break-all}
+.agent-node .errbox .h{font-size:9.5px;color:var(--dimmer);margin-top:7px}
+/* 可读决策 chips */
+.agent-node .readable{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
+.agent-node .readable .chip{font-size:9.5px;border-radius:5px;padding:2px 9px;border:1px solid var(--border2);background:var(--panel2);color:var(--dim)}
+.agent-node .readable .chip.keep{color:#34d399;border-color:rgba(52,211,153,.35)}
+.agent-node .readable .chip.rtr{color:#fbbf24;border-color:rgba(251,191,36,.4)}
+
+/* RH-13：空闲态从一行「暂无调用记录」改为多行说明（当前模型 + 何时会有内容）。
+   多行需要纵向堆叠与行距，place-items:center 单独用会把三行挤在一起。 */
+.agent-console-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:180px;font-size:11px;color:var(--dimmer);text-align:center;padding:0 16px}
+.agent-console-empty strong{color:var(--dim);font-size:12px;font-weight:600}
+
+/* ===== 底部 token ===== */
+.agent-foot{display:flex;gap:14px;font-size:10px;color:var(--dimmer);font-family:var(--mono,ui-monospace,Consolas,monospace);border-top:1px solid var(--border);padding-top:8px}
+
+@media(max-width:900px){
+  .agent-panel{padding:18px}
+  .agent-console-head{flex-wrap:wrap;row-gap:10px}
+  .agent-model-pick{order:3;width:100%;flex-wrap:wrap}
+  .agent-model-pick .amp-item select{max-width:none;flex:1}
+  .agent-node .call .top{grid-template-columns:8px minmax(0,1fr) max-content;grid-template-areas:"grip who meta" ". result result";align-items:start}
+  .agent-node .call .meta{align-self:start}
+}
+
+@media(max-width:720px){
+  .agent-panel{padding:14px}
+  .agent-console-head{padding-bottom:12px}
+  .agent-timeline{padding:16px 0 6px}
+  .agent-timeline::before{display:none}
+  .agent-node .stamp{position:static;display:flex;gap:6px;margin:0 0 6px;width:auto;text-align:left}
+  .agent-node .pulse{display:none}
+  .agent-node .call .top{grid-template-columns:8px minmax(0,1fr);grid-template-areas:"grip who" ". result" ". meta"}
+  .agent-node .call .meta{justify-content:flex-start;flex-wrap:wrap;min-width:0}
+  .agent-live-row{grid-template-columns:7px minmax(0,1fr)}
+  .agent-live-row span:last-child{grid-column:2}
+}
+/* 窗口不高时上方那几张卡（命令栏/用量/轨迹）会把日志挤成一条缝。
+   矮屏优先保日志：卡片自身让出内边距与高度，日志区留一个下限。 */
+@media (max-height: 900px){
+  .agent-panel{padding:14px 18px;gap:8px}
+  .agent-usage{padding:8px 12px;gap:5px}
+  .agent-trace{padding:8px 12px}
+  .agent-timeline{padding-top:8px}
+}
+@media (max-height: 720px){
+  .agent-trace-band{gap:3px}
+}
+
+/* ===== 命令栏（RS-2 / D12）：操作 · 范围 · 摘要 · 开始/停止 ===== */
+.agent-composer:not(:empty){padding:12px 0;border-bottom:1px solid var(--border)}
+.ac-row{display:flex;align-items:center;gap:10px;min-width:0}
+.ac-op{flex:0 0 auto;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--mgr,#a78bfa) 16%,transparent);border:1px solid color-mix(in srgb,var(--mgr,#a78bfa) 40%,transparent);color:var(--text);font-size:11px;font-weight:600;letter-spacing:.02em}
+.ac-scope{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--border2);color:var(--text);font:inherit;font-size:11px;cursor:pointer}
+.ac-scope:hover:not(:disabled){border-color:var(--mgr,#a78bfa)}
+.ac-scope:disabled{opacity:.5;cursor:default}
+.ac-scope .ac-caret{font-size:9px;color:var(--dimmer)}
+.ac-summary{flex:1 1 auto;min-width:0;font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-run{flex:0 0 auto;padding:4px 14px;border-radius:7px;border:1px solid color-mix(in srgb,var(--mgr,#a78bfa) 55%,transparent);background:color-mix(in srgb,var(--mgr,#a78bfa) 22%,transparent);color:var(--text);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
+.ac-run:hover:not(:disabled){background:color-mix(in srgb,var(--mgr,#a78bfa) 34%,transparent)}
+.ac-run.running{border-color:color-mix(in srgb,#f87171 55%,transparent);background:color-mix(in srgb,#f87171 14%,transparent)}
+.ac-run:disabled{opacity:.6;cursor:default}
+
+/* 章节可选框：链接式清单（D4/D5） */
+.ac-chapters{margin-top:10px;padding:10px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--panel2);max-height:260px;overflow:auto}
+.ac-tools{display:flex;gap:14px;flex-wrap:wrap;padding-bottom:8px;margin-bottom:8px;border-bottom:1px dashed var(--border2);font-size:10.5px}
+.ac-tools a{color:var(--accent);text-decoration:none}
+.ac-tools a:hover{text-decoration:underline}
+.ac-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 16px}
+.ac-ch{display:flex;align-items:center;gap:7px;min-width:0;padding:2.5px 4px;border-radius:5px;font-size:11px;color:var(--text);cursor:pointer;user-select:none}
+.ac-ch:hover{background:color-mix(in srgb,var(--mgr,#a78bfa) 8%,transparent)}
+.ac-ch.off{opacity:.45;cursor:default}
+.ac-ch input{accent-color:var(--mgr,#a78bfa);margin:0;flex:0 0 auto}
+.ac-ch-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac-ch-badge{flex:0 0 auto;margin-left:auto;font-size:9.5px;color:var(--dimmer)}
+.ac-ch-badge.stuck{color:#fbbf24}
+
+@media(max-width:720px){
+  .ac-row{flex-wrap:wrap}
+  .ac-summary{order:4;width:100%;white-space:normal}
+  .ac-list{grid-template-columns:1fr}
+}

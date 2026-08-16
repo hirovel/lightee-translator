@@ -1,0 +1,22 @@
+{
+  "name": "lightee-translator",
+  "version": "0.10.0",
+  "private": true,
+  "description": "轻小译 (Lightee) — 基于多 Agent 协作的日本轻小说 AI 翻译引擎",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test && npm --prefix apps/electron test && npm run test:invariants",
+    "test:invariants": "vitest run --config vitest.invariants.config.ts",
+    "typecheck": "pnpm -r build && pnpm -r typecheck && npm --prefix apps/electron run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

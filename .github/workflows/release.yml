@@ -1,0 +1,72 @@
+name: Release Lightee
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/electron/package-lock.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron dependencies
+        run: npm ci
+        working-directory: apps/electron
+
+      # 发布判定（specs/release-hardening.md §1）：类型检查 + 全部单测 + 真实 Electron 门禁。
+      # 根 test/typecheck 已包含 apps/electron（RH-09），因此这里不再单独跑一遍。
+      - name: Typecheck (core + engine + electron)
+        run: pnpm typecheck
+
+      - name: Test (core + engine + electron)
+        run: pnpm test
+
+      - name: Release gate (real Electron)
+        run: npm run verify:release:workflow
+        working-directory: apps/electron
+
+      # 这一步**不能**拿到 GH_TOKEN。electron-builder 的 package.json 里配了 github
+      # publish provider，一旦环境里有 token，打 tag 的构建它就会自己建 release 并上传，
+      # 而且是打完包**立刻**传，排在 check:asar 之前——产物还没验就已经公开了。
+      # 顺序必须是「先验产物，再上传」，所以发布权只留给最后一步。
+      - name: Package
+        run: npm run package:win
+        working-directory: apps/electron
+
+      # 草稿发布：资产就位、正文空白，由人写完发布说明再手动 Publish。
+      # generate_release_notes 关掉——自动生成的是提交列表，那是开发过程，不是给用户看的东西。
+      # 文件逐个列出，不用 *.yml 通配：那会把 builder-debug.yml（electron-builder 的配置
+      # dump，纯调试残渣）一起传上去。latest.yml 和 .blockmap 必须留，前者是自动更新的
+      # 版本清单，后者让升级只下差分而不是重下整包。
+      - name: Upload draft release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/electron/release/Lightee-*-setup.exe
+            apps/electron/release/Lightee-*-portable.exe
+            apps/electron/release/Lightee-*-setup.exe.blockmap
+            apps/electron/release/latest.yml
+          draft: true
+          generate_release_notes: false

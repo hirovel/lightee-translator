@@ -1,0 +1,60 @@
+name: CI
+
+# 每次提交与 PR 都跑，**不打包也不发布**——release.yml 仍然只在打 tag 时触发。
+#
+# 为什么需要这条：此前门禁只挂在 tag 上，平时提交完全不过检查。结果是
+# `verify-release-ipc.mjs` 里 `bookReview.status === "approved"` 的断言在 RV-06
+# 把状态改成三态之后一直「绿」着——它只是从没被跑过。门禁不跑就会腐烂，
+# 而腐烂的门禁比没有门禁更坏：它让人以为查过了。
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*.*.*"] # tag 走 release.yml，避免同一提交跑两遍
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支上的新提交取消上一次运行：CI 是给人看当前状态的，排队的旧结果没有价值。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/electron/package-lock.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron dependencies
+        run: npm ci
+        working-directory: apps/electron
+
+      # 与 release.yml 的验证步骤保持同样三项，顺序也一致。
+      # 差别只在于 CI 不 Package、不 Publish。
+      - name: Typecheck (core + engine + electron)
+        run: pnpm typecheck
+
+      - name: Test (core + engine + electron + invariants)
+        run: pnpm test
+
+      # 真实 Electron 门禁。这一步最容易腐烂，正是它必须每次都跑的理由。
+      # windows-latest 无显示器，Electron 用 --headless 无法启动 BrowserWindow，
+      # 因此这里不加任何开关——门禁脚本自带 remote-debugging，无头环境可跑。
+      - name: Release gate (real Electron)
+        run: npm run verify:release:workflow
+        working-directory: apps/electron

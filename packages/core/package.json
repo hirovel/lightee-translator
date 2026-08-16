@@ -1,0 +1,89 @@
+{
+  "name": "@lightee/core",
+  "version": "0.10.0",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./extract-fuse": {
+      "types": "./dist/extract-fuse.d.ts",
+      "import": "./dist/extract-fuse.js"
+    },
+    "./atomic-fs": {
+      "types": "./dist/atomic-fs.d.ts",
+      "import": "./dist/atomic-fs.js"
+    },
+    "./archive-registry": {
+      "types": "./dist/archive-registry.d.ts",
+      "import": "./dist/archive-registry.js"
+    },
+    "./terminology-repository": {
+      "types": "./dist/terminology-repository.d.ts",
+      "import": "./dist/terminology-repository.js"
+    },
+    "./term-provenance": {
+      "types": "./dist/term-provenance.d.ts",
+      "import": "./dist/term-provenance.js"
+    },
+    "./source-classify": {
+      "types": "./dist/source-classify.d.ts",
+      "import": "./dist/source-classify.js"
+    },
+    "./evidence-card": {
+      "types": "./dist/evidence-card.d.ts",
+      "import": "./dist/evidence-card.js"
+    },
+    "./optional": {
+      "types": "./dist/optional.d.ts",
+      "import": "./dist/optional.js"
+    },
+    "./json-salvage": {
+      "types": "./dist/json-salvage.d.ts",
+      "import": "./dist/json-salvage.js"
+    },
+    "./json-fence": {
+      "types": "./dist/json-fence.d.ts",
+      "import": "./dist/json-fence.js"
+    },
+    "./epub-parse": {
+      "types": "./dist/epub-parse.d.ts",
+      "import": "./dist/epub-parse.js"
+    },
+    "./epub-write": {
+      "types": "./dist/epub-write.d.ts",
+      "import": "./dist/epub-write.js"
+    },
+    "./state-machine": {
+      "types": "./dist/state-machine.d.ts",
+      "import": "./dist/state-machine.js"
+    },
+    "./chapter-state": {
+      "types": "./dist/chapter-state.d.ts",
+      "import": "./dist/chapter-state.js"
+    },
+    "./batch": {
+      "types": "./dist/batch.d.ts",
+      "import": "./dist/batch.js"
+    },
+    "./paragraph": {
+      "types": "./dist/paragraph.d.ts",
+      "import": "./dist/paragraph.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "domhandler": "^6.0.1",
+    "fast-xml-parser": "^5.10.1",
+    "htmlparser2": "^12.0.0",
+    "jszip": "^3.10.1"
+  }
+}

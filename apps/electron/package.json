@@ -1,0 +1,120 @@
+{
+  "name": "lightee-electron",
+  "version": "0.10.0",
+  "description": "Lightee desktop translation workbench for Japanese light novels",
+  "author": "hirovel",
+  "license": "AGPL-3.0-only",
+  "repository": "https://github.com/hirovel/lightee-translator",
+  "build": {
+    "appId": "com.hirovel.lightee",
+    "productName": "Lightee",
+    "artifactName": "Lightee-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "dist-main/**/*",
+      "main.js",
+      "single-instance.js",
+      "preload.js",
+      "package.json",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "hirovel",
+      "repo": "lightee-translator",
+      "releaseType": "draft"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "artifactName": "Lightee-${version}-${os}-${arch}-setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "Lightee-${version}-${os}-${arch}-portable.${ext}"
+    }
+  },
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "sync:ui-shell": "node scripts/sync-ui-shell.mjs",
+    "dev": "npm run sync:ui-shell && npm run build:main && node scripts/dev.mjs",
+    "build": "npm run sync:ui-shell && npm run build:main && vite build && npm run check:renderer && npm run check:package",
+    "build:main": "npm run build:engine && tsc -p tsconfig.main.json",
+    "start": "npm run build && electron .",
+    "package:win": "npm run build && electron-builder --win --publish never && npm run check:asar",
+    "package:dir": "npm run build && electron-builder --dir",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
+    "test": "vitest run",
+    "capture:busy": "node scripts/capture-busy-demo.mjs",
+    "clean": "node scripts/clean.mjs",
+    "measure:term-injection": "node scripts/measure-term-injection.mjs",
+    "measure:batch-size": "node scripts/measure-batch-size.mjs",
+    "wiring:generate": "node scripts/generate-wiring-doc.mjs",
+    "wiring:check": "npm run wiring:generate && node scripts/check-wiring.mjs",
+    "verify:wiring": "node scripts/verify-wiring.mjs",
+    "check:renderer": "node scripts/check-renderer.mjs",
+    "check:package": "node scripts/check-package-files.mjs",
+    "verify:workspaces": "node scripts/verify-workspaces.mjs",
+    "verify:release:ipc": "npm run build && node scripts/verify-release-ipc.mjs",
+    "verify:release:ui": "npm run build && node scripts/verify-release-ui.mjs",
+    "verify:release:workflow": "npm run build && node scripts/verify-release-ipc.mjs && node scripts/verify-release-ui.mjs",
+    "verify:release": "npm run verify:release:workflow",
+    "accept:backend": "npm run build && node scripts/run-backend-acceptance.mjs",
+    "scale:fixture": "npm run build:main && node scripts/generate-scale-fixture.mjs",
+    "scale:measure": "node scripts/measure-scale.mjs",
+    "scale:assert": "node scripts/measure-scale.mjs --assert --tolerance 3",
+    "build:engine": "npm --prefix ../../packages/engine run build",
+    "check:asar": "node scripts/check-asar.mjs"
+  },
+  "keywords": [
+    "translation",
+    "japanese",
+    "light-novel",
+    "electron"
+  ],
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.5.4",
+    "@codemirror/view": "^6.36.5",
+    "@lightee/engine": "file:../../packages/engine",
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.9.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.2"
+  }
+}

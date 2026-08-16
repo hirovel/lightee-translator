@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>lightee</title>
+</head>
+<body><div class="terminal" style="position:relative">
+  <div class="term-titlebar" role="banner">
+    <div class="titlebar-brand">
+      <span class="brand-mark" aria-hidden="true">✦</span>
+      <span class="brand-wordmark"><b>Lightee</b><span class="brand-cn">轻小译</span></span>
+    </div>
+    <div class="titlebar-context"><span>翻译工作台</span><span class="context-separator">/</span><strong>加载中…</strong></div>
+    <div class="titlebar-toast" id="titlebar-toast" role="status" aria-live="polite"></div>
+    <!-- 当前模型 · 连接状态：内容全部由 workspace-bridge 的 fillTitlebar 按真实配置填写。
+         这里的初值只能是「读取中…」——写死一个模型名或「在线」就是在没有依据时先撒一次谎。 -->
+    <div class="titlebar-status" id="bar-status">
+      <button type="button" class="tb-model" id="tb-model" aria-haspopup="menu" aria-expanded="false" title="当前翻译模型 — 点击切换模型或前往设置">
+        <span class="status-dot" id="tb-dot"></span>
+        <span class="tb-model-name" id="tb-model-name">读取中…</span>
+        <span class="status-separator"></span>
+        <span class="tb-conn" id="tb-conn">读取中…</span>
+        <span class="tb-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="tb-menu" id="tb-menu" role="menu" aria-labelledby="tb-model" hidden></div>
+    </div>
+    <div class="window-controls" aria-label="窗口控制">
+      <button type="button" class="window-control" data-window-minimize title="最小化" aria-label="最小化"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" /></svg></button>
+      <button type="button" class="window-control" data-window-maximize title="最大化" aria-label="最大化" aria-pressed="false"><svg data-window-glyph="maximize" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" /></svg><svg data-window-glyph="restore" viewBox="0 0 12 12" aria-hidden="true" hidden><path d="M4 3.5h5v5" /><path d="M3 5.5v3h5" /></svg></button>
+      <button type="button" class="window-control close" data-window-close title="关闭" aria-label="关闭"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+    </div>
+  </div>
+  <div class="term-body" id="stage"></div>
+</div>
+
+<div class="switcher" id="switcher">
+  <span class="arrow" id="prev">◀</span>
+  <span class="label" id="label">主界面</span>
+  <span class="arrow" id="next">▶</span>
+</div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

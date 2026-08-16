@@ -114,6 +114,14 @@ function configureAutoUpdates() {
   }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  // autoUpdater 是个 EventEmitter：下载/校验失败时内部调 dispatchError() → emit("error", ...)。
+  // Node 对零监听器的 "error" 事件默认同步抛出、让进程崩溃——这条监听器不是锦上添花，
+  // 少了它，一次网络抖动或下载损坏就会把整个应用带崩，而不是「这次没查到更新」那样
+  // 悄悄过去。RL-08 更新闭环演练能发现这个，是因为它真的让下载走到了失败分支；
+  // 生产环境同样会走到，只是概率低、日志缺失时更难查。
+  autoUpdater.on("error", (err) => {
+    void appLog.write("error", `self-update failed: ${err?.message || err}`);
+  });
   autoUpdater.on("update-downloaded", () => {
     void appLog.write("info", "update downloaded, will install on quit");
     for (const win of BrowserWindow.getAllWindows()) {

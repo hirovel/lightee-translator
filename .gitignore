@@ -9,6 +9,8 @@ scratch/
 apps/electron/.artifacts/
 apps/electron/.tmp/
 apps/electron/release/
+# 更新闭环演练产物：两个临时版本的完整安装包，只在本地跑 verify-update-flow 时存在
+apps/electron/verify-update/
 docs/*-debug.png
 docs/*-result.png
 

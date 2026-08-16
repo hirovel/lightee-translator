@@ -18,7 +18,7 @@
  * 流程：算 zip 的 sha256 → 先用**错误**哈希装一次（必须失败，证明校验是生效的）→
  * 换正确哈希装 → 核对装到了 scoop 的 apps 目录、shim 可用 → 启动 →
  * 轮询 AppLog 确认写下了 self-update skipped: package-manager-install →
- * 关闭 → scoop uninstall → 核对 ~/.lightee 未被动过。
+ * 关闭 → scoop uninstall → 核对配置与调用历史未被动过。
  */
 import { createServer } from "node:http";
 import { createReadStream, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -27,6 +27,7 @@ import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { lighteePaths, lighteeUserDataRoot } from "../dist-main/shared/app-paths.js";
 
 const VERSION = "0.10.0";
 const ZIP_NAME = `Lightee-${VERSION}-win-x64.zip`;
@@ -46,9 +47,11 @@ const scoopCmd = join(scoopRoot, "shims", "scoop.cmd");
 const installedDir = join(scoopRoot, "apps", "lightee", "current");
 const installedExe = join(installedDir, "Lightee.exe");
 const shimPath = join(scoopRoot, "shims", "lightee.exe");
-// userData 目录取的是打包后 package.json 的 name（lightee-electron），不是 productName。
-const appLogDir = join(process.env.APPDATA, "lightee-electron", "logs");
-const lighteeHome = join(process.env.USERPROFILE, ".lightee");
+// 数据根由 app.setPath("userData") 显式指定成 %APPDATA%\Lightee（见 shared/app-paths.ts）——
+// 不再是 Electron 默认的 package.json name（lightee-electron）。路径从同一份定义算出来，
+// 免得脚本和应用各算各的：上一轮演练就因为脚本查错目录空等了 5 分钟，被误判成更新卡死。
+const dataRoot = lighteeUserDataRoot(process.env.APPDATA);
+const appLogDir = lighteePaths(dataRoot).logsDir;
 
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -118,16 +121,27 @@ function runScoop(args, { allowFailure = false } = {}) {
   });
 }
 
-/** ~/.lightee 是用户的真实工作数据，任何渠道的安装/卸载都不该碰它。只读快照，不动内容。 */
-function homeSnapshot() {
-  if (!existsSync(lighteeHome)) return "(不存在)";
-  return readdirSync(lighteeHome)
-    .map((n) => {
-      const s = statSync(join(lighteeHome, n));
-      return `${n}:${s.isDirectory() ? "dir" : s.size}`;
+/**
+ * 配置与调用历史是用户的真实工作数据，任何渠道的安装/卸载都不该碰。只读快照，不动内容。
+ *
+ * 只快照 config + history，不快照整个数据根：logs 在演练过程中本来就会被写（应用起来了），
+ * 把它算进去等于给自己制造一个必然的假警报。
+ */
+function dataSnapshot() {
+  const watched = [lighteePaths(dataRoot).configDir, lighteePaths(dataRoot).historyDir];
+  return watched
+    .map((dir) => {
+      if (!existsSync(dir)) return `${dir}=(不存在)`;
+      const entries = readdirSync(dir)
+        .map((n) => {
+          const s = statSync(join(dir, n));
+          return `${n}:${s.isDirectory() ? "dir" : s.size}`;
+        })
+        .sort()
+        .join("|");
+      return `${dir}=${entries}`;
     })
-    .sort()
-    .join("|");
+    .join("  ");
 }
 
 /**
@@ -233,8 +247,8 @@ async function main() {
     process.exit(1);
   }
 
-  const homeBefore = homeSnapshot();
-  log(`~/.lightee 安装前快照：${homeBefore}`);
+  const dataBefore = dataSnapshot();
+  log(`配置/历史 安装前快照：${dataBefore}`);
 
   const hash = await sha256(zipPath);
   log(`${ZIP_NAME} sha256 = ${hash}`);
@@ -304,13 +318,13 @@ async function main() {
     for (const leftover of [join(scoopRoot, "apps", "lightee"), join(scoopRoot, "buckets", BUCKET_NAME)]) {
       if (existsSync(leftover)) await rm(leftover, { recursive: true, force: true }).catch(() => {});
     }
-    const homeAfter = homeSnapshot();
-    log(`~/.lightee 卸载后快照：${homeAfter}`);
-    if (homeAfter !== homeBefore) {
-      console.error(`❌ ~/.lightee 被安装/卸载改动了：\n  前：${homeBefore}\n  后：${homeAfter}`);
+    const dataAfter = dataSnapshot();
+    log(`配置/历史 卸载后快照：${dataAfter}`);
+    if (dataAfter !== dataBefore) {
+      console.error(`❌ 配置/历史 被安装/卸载改动了：\n  前：${dataBefore}\n  后：${dataAfter}`);
       process.exitCode = 1;
     } else {
-      log("✅ ~/.lightee 未被动过");
+      log("✅ 配置与调用历史未被动过");
     }
   }
 }

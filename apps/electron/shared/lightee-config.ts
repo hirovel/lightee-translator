@@ -1,24 +1,42 @@
 /**
- * Lightee 独立配置（发布后不依赖 ~/.pi/agent）
- * 参考 pi agent 源码设计：
+ * Lightee 独立配置。
  *  - models.json 凭据无关（provider/模型定义，可共享）
  *  - auth.json 凭据分离（原子写 + 机密字段加密，见下方 SecretCodec）
- * 路径：~/.lightee/models.json + ~/.lightee/auth.json
+ * 路径：数据根下的 `config/models.json` + `config/auth.json`（见 app-paths.ts）。
  *
- * 本模块**不依赖 Electron**（测试与 CLI 可直接引入）。加密能力由宿主注入：
- * Electron 主进程在启动时 `setSecretCodec(...)` 注入 safeStorage（Windows = DPAPI）；
- * 未注入时全链路明文可用，行为与加密前一致。
+ * 本模块**不依赖 Electron**（测试与 CLI 可直接引入）。两样东西由宿主注入：
+ *  - 数据根：主进程启动时 `setLighteeDataRoot(app.getPath("userData"))`；
+ *  - 加密：主进程 `setSecretCodec(...)` 注入 safeStorage（Windows = DPAPI）。
+ * 未注入加密时全链路明文可用，行为与加密前一致。
  */
-import { homedir } from "node:os";
 import { chmod, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { withFileMutationQueue } from "./atomic-file.js";
+import { lighteePaths } from "./app-paths.js";
+
+/**
+ * 数据根。刻意**没有**内置默认值。
+ *
+ * 从前这里是 `join(homedir(), ".lightee")`——一个库模块自己决定往用户主目录哪里写。
+ * 路径是**政策**，政策该由主进程一处决定；散在库里的默认值正是「数据落在三个地方、
+ * 谁也说不全」的来源。没注入就报错，比默默写到一个谁都没想到的位置好。
+ */
+let injectedDataRoot: string | undefined;
+
+/** 由主进程在启动最早处调用，传 `app.getPath("userData")`。 */
+export function setLighteeDataRoot(root: string): void {
+  injectedDataRoot = root;
+}
 
 export function lighteeConfigDir(): string {
-  // LIGHTEE_CONFIG_DIR：测试与隔离验收运行指向临时目录，避免写入用户真实 ~/.lightee。
-  // 生产运行不设置该变量。
+  // LIGHTEE_CONFIG_DIR：测试与隔离验收运行指向临时目录，避免碰用户真实配置。
+  // 它直接就是 config 目录本身（不再往下拼 config/），保持既有脚本与测试的用法不变。
   const override = process.env.LIGHTEE_CONFIG_DIR?.trim();
-  return override ? override : join(homedir(), ".lightee");
+  if (override) return override;
+  if (injectedDataRoot) return lighteePaths(injectedDataRoot).configDir;
+  throw new Error(
+    "Lightee 数据根未设置：主进程需先调用 setLighteeDataRoot()，测试请设置 LIGHTEE_CONFIG_DIR。",
+  );
 }
 export function lighteeModelsPath(): string {
   return join(lighteeConfigDir(), "models.json");
@@ -28,7 +46,7 @@ export function lighteeAuthPath(): string {
 }
 
 /**
- * 用户工作区书架。独立于 Electron profile，避免清理开发/浏览器缓存时丢失已注册工作区。
+ * 用户工作区书架。只存清单，译稿本体在用户自选目录里。
  */
 export function lighteeWorkspaceRegistryPath(): string {
   return join(lighteeConfigDir(), "workspaces.json");

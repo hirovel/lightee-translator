@@ -5142,7 +5142,9 @@ export async function mountWorkspaceBridge(adapter: IpcWorkspaceAdapter): Promis
     const openConfig = detailEl.querySelector<HTMLElement>("[data-open-config]");
     if (openConfig) openConfig.onclick = () => {
       void ipcInvoke("ai.config.open", { kind: "models" }).then((result) => {
-        aiNote(result?.ok ? "已打开 ~/.lightee/models.json（保存后即时生效）" : "打开配置文件失败", Boolean(result?.ok));
+        // 不在提示里写死路径：文件已经在用户眼前打开了，路径就在标题栏上，
+        // 而写死的那一份只会在下次搬家时变成谎话（0.10 就搬过一次）。
+        aiNote(result?.ok ? "已打开 models.json（保存后即时生效）" : "打开配置文件失败", Boolean(result?.ok));
       });
     };
 

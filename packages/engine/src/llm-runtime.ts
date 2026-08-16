@@ -7,8 +7,7 @@
 
 import { createProvider, lazyApi } from "@earendil-works/pi-ai";
 import type { Api, AssistantMessage, Context, Model, Tool } from "@earendil-works/pi-ai";
-import { homedir } from "node:os";
-import path, { join } from "node:path";
+import path from "node:path";
 import { readFile, stat } from "node:fs/promises";
 import fs from "node:fs";
 import { appendLineWithRotation } from "@lightee/core/rotating-jsonl";
@@ -479,10 +478,11 @@ function entrySecret(entry: unknown, decryptSecret?: (sealed: string) => string)
   }
 }
 
-function resolveApiKey(config: ProviderConfig, configDir: string, decryptSecret?: (sealed: string) => string): string | undefined {
+function resolveApiKey(config: ProviderConfig, configDir: string | undefined, decryptSecret?: (sealed: string) => string): string | undefined {
   if (config.apiKey) return config.apiKey;
   if (config.apiKeyEnv) return process.env[config.apiKeyEnv];
-  // 从配置目录 auth.json 读取（默认 ~/.lightee；迁移期兼容 ~/.pi/agent）
+  if (!configDir) return undefined;
+  // 从配置目录 auth.json 读取（目录由宿主显式传入，见 LlmRuntimeOptions.configDir）
   const authPath = path.join(configDir, "auth.json");
   try {
     if (fs.existsSync(authPath)) {
@@ -502,18 +502,23 @@ function configKeyForAuth(config: ProviderConfig): string {
   return config.authKey ?? "";
 }
 
-/** 配置目录：优先 Lightee 自己的 ~/.lightee（发布独立）；尚未初始化时 fallback ~/.pi/agent（迁移期兼容） */
-function defaultConfigDir(): string {
-  // 与 apps/electron 的 lighteeConfigDir() 保持一致：隔离验收/测试运行不得读用户真实配置。
+/**
+ * 配置目录：只认宿主显式传入的 `configDir`，其次 `LIGHTEE_CONFIG_DIR`（隔离验收与测试），
+ * 都没有就是**没有配置目录**——不猜、不回退。
+ *
+ * 这里从前会在 `~/.lightee/models.json` 不存在时回退到 `~/.pi/agent`：那是早期与另一个
+ * agent 工具共用配置留下的分支。写入侧早就独立了，读取侧没跟着拆。对一个已发布的应用，
+ * 这个回退有三重毛病——它去读**另一个工具的 API Key**；行为取决于那个不相干的工具装没装；
+ * 而且全程静默，用户根本不知道密钥是从哪儿来的。路径与凭据都属于宿主的政策，库不该自作主张。
+ */
+function defaultConfigDir(): string | undefined {
   const override = process.env.LIGHTEE_CONFIG_DIR?.trim();
-  if (override) return override;
-  const lightee = path.join(homedir(), ".lightee");
-  const pi = path.join(homedir(), ".pi", "agent");
-  return fs.existsSync(path.join(lightee, "models.json")) ? lightee : pi;
+  return override ? override : undefined;
 }
 
 /** 从配置目录 models.json 读取 provider 配置 */
-function loadProviders(configDir: string): Record<string, ProviderConfig> {
+function loadProviders(configDir: string | undefined): Record<string, ProviderConfig> {
+  if (!configDir) return {};
   const p = path.join(configDir, "models.json");
   if (!fs.existsSync(p)) return {};
   try {
@@ -526,9 +531,9 @@ function loadProviders(configDir: string): Record<string, ProviderConfig> {
 
 export interface LlmRuntimeOptions {
   providers?: Record<string, ProviderConfig>;
-  /** 自定义配置目录（models.json + auth.json）；缺省：~/.lightee，不存在时 fallback ~/.pi/agent */
+  /** 配置目录（models.json + auth.json）。不传则退到 `LIGHTEE_CONFIG_DIR`，再没有就没有磁盘配置。 */
   configDir?: string;
-  /** LLM 调用历史持久化文件（JSONL 追加）；缺省 ~/.lightee/llm-history.jsonl；传 false 关闭 */
+  /** LLM 调用历史持久化文件（JSONL 追加）。不传 = 不落盘；传 false 亦然。 */
   historyFile?: string | false;
   /**
    * auth.json 中带 `sealed` 标记的机密的解密函数（RH-17）。由宿主注入
@@ -573,7 +578,7 @@ export class LlmRuntime {
   /** 注册时的 provider 配置（含 authKey），密钥解析的唯一依据 */
   private configs: Map<string, ProviderConfig> = new Map();
   private models: Map<string, Model<Api>> = new Map(); // "provider/modelId" -> Model
-  private readonly configDir: string;
+  private readonly configDir: string | undefined;
   /** LLM 调用历史持久化文件（JSONL） */
   private readonly historyFile?: string;
   /** 当前调用归属标签（调用方在调用前设置） */
@@ -701,9 +706,11 @@ export class LlmRuntime {
   /** 上次载入时 models.json 的可见状态指纹，用于探测运行期间的外部修改 */
   private diskStamp = "";
 
-  private constructor(configDir: string, historyFile: string | false | undefined, decryptSecret: ((sealed: string) => string) | undefined, diskBacked: boolean) {
+  private constructor(configDir: string | undefined, historyFile: string | false | undefined, decryptSecret: ((sealed: string) => string) | undefined, diskBacked: boolean) {
     this.configDir = configDir;
-    this.historyFile = historyFile === false ? undefined : (historyFile ?? join(homedir(), ".lightee", "llm-history.jsonl"));
+    // 不传就不落盘。从前这里默认写 `~/.lightee/llm-history.jsonl`——库替宿主选了个
+    // 主目录位置，于是任何 import engine 的进程（含脚本与测试）都会往那儿追加。
+    this.historyFile = historyFile === false ? undefined : historyFile;
     this.decryptSecret = decryptSecret;
     this.diskBacked = diskBacked;
   }
@@ -733,6 +740,7 @@ export class LlmRuntime {
 
   /** models.json 的可见状态指纹（mtime:size）；读不到时为空串 */
   private diskStampNow(): string {
+    if (!this.configDir) return "";
     try {
       const stat = fs.statSync(path.join(this.configDir, "models.json"));
       return `${stat.mtimeMs}:${stat.size}`;

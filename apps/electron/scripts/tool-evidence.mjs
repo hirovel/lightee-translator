@@ -29,10 +29,11 @@
  */
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildUsageReport, renderUsageReport } from "../dist-main/shared/usage-report.js";
+import { lighteePaths, lighteeUserDataRoot } from "../dist-main/shared/app-paths.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..", "..");
@@ -66,7 +67,7 @@ export default async function run({ ipcService }) {
   const runId = `evidence-${startedAt}`;
   const workspaceRoot = await mkdtemp(join(tmpdir(), "lightee-evidence-"));
   const invoke = async (command, payload) => ipcService.invoke(envelope(command, payload));
-  const historyPath = join(homedir(), ".lightee", "llm-history.jsonl");
+  const historyPath = lighteePaths(lighteeUserDataRoot(process.env.APPDATA)).historyFile;
 
   // 告警是门禁失败与提取哑火的**唯一**外传通道（onTranslateWarn → agent.status kind=warning）
   const warnings = [];

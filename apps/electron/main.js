@@ -8,9 +8,18 @@
  *
  * Ticket 01: 先跑通窗口骨架（加载 renderer），IPC 契约在 Ticket 02。
  */
-// 单实例守卫必须排在所有其他 import 之前：ESM 会按 import 顺序求值模块体，
-// 只有这样才能抢在 main-ipc 的副作用（服务构造、注册表迁移）之前退出重复实例。
+// ↓ 这四个 import 的**顺序是语义的一部分**，别调，也别把它们换成模块体里的调用。
+// ESM 会把一个模块的全部 import 先求值完，才轮到模块体的第一条语句——所以「先后」
+// 只能靠 import 的排列表达：
+//
+//   1. user-data-root       定下 userData 到底在哪（单实例锁就存在 userData 里，
+//                           设晚了会出现新旧两份应用各拿各的锁、互不排斥）
+//   2. single-instance      抢锁；抢不到的进程在这里就退出，于是只有一个进程会迁移
+//   3. storage-migration    把旧数据搬进新根
+//   4. main-ipc             构造 AppLog、读工作区注册表——此时数据必须已经就位
+import { migrationLog } from "./user-data-root.js";
 import "./single-instance.js";
+import "./storage-migration-boot.js";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -41,6 +50,10 @@ async function configureHttpNetwork() {
   }
 }
 void configureHttpNetwork();
+
+// 迁移发生在 AppLog 存在之前（它自己就住在数据根里），所以那几行是攒着的，这里补记。
+// 只有路径与文件数，没有任何配置值。
+for (const line of migrationLog) void appLog.write("info", line);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let quitting = false;

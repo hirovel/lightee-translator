@@ -714,7 +714,7 @@
         "packages/engine/src/index.ts",
         "packages/engine/tsconfig.build.json"
       ],
-      "caveat": "import/export/confirm/review run against the real engine in tests and Electron smoke; translate.run is wired with a real LLM runtime (reads ~/.pi/agent/models.json) but automated runs inject a fake llm — a real paid call requires explicit user confirmation."
+      "caveat": "import/export/confirm/review run against the real engine in tests and Electron smoke; translate.run is wired with a real LLM runtime (config dir is passed in explicitly by the main process — see shared/app-paths.ts) but automated runs inject a fake llm — a real paid call requires explicit user confirmation."
     },
     {
       "id": "17",

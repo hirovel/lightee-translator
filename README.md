@@ -35,15 +35,13 @@ AI Agent 辅助翻译的日文轻小说工作台
 & "$env:LOCALAPPDATA\Programs\Lightee\Uninstall Lightee.exe" /S --delete-app-data
 ```
 
-在卸载界面上操作也可以，过程中会问一次要不要删数据，默认不删。
-
 Scoop 装的：
 
 ```powershell
-scoop uninstall lightee; Remove-Item -Recurse -Force ~\.lightee, $env:APPDATA\lightee-electron
+scoop uninstall lightee; Remove-Item -Recurse -Force $env:APPDATA\Lightee
 ```
 
-数据在 `~\.lightee`（设置与调用历史）和 `%APPDATA%\lightee-electron`（日志与缓存）。译稿工作区在你自己选的目录里，两种方式都不会动它。
+Lightee 只占磁盘上两个位置：程序在 `%LOCALAPPDATA%\Programs\Lightee`，数据全部在 `%APPDATA%\Lightee`（设置、API Key、调用历史、日志）。译稿工作区在你自己选的目录里，以上两种方式都不会动它。
 
 ---
 

@@ -142,26 +142,38 @@ describe("IpcService", () => {
   it("reports the effective default model when a workspace has no explicit ai.model", async () => {
     const root = await mkdtemp(join(tmpdir(), "lightee-ipc-"));
     roots.push(root);
-    const service = createIpcService();
-    const created = await service.invoke(envelope("workspace.create", { path: root, name: "Default model" }));
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
+    // 必须隔离配置目录：`ai.providers.list` 会走 ensureLighteeModels，那一步在
+    // models.json 不存在时**会把预置写下去**。不隔离的话，跑一次单元测试就在开发者的
+    // 真实配置目录里凭空造出一份 models.json（此前正是如此，只是没人看见）。
+    const configDir = await mkdtemp(join(tmpdir(), "lightee-config-"));
+    roots.push(configDir);
+    const previous = process.env.LIGHTEE_CONFIG_DIR;
+    process.env.LIGHTEE_CONFIG_DIR = configDir;
+    try {
+      const service = createIpcService();
+      const created = await service.invoke(envelope("workspace.create", { path: root, name: "Default model" }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
 
-    const providers = await service.invoke(envelope("ai.providers.list", { workspaceId: created.value.id }));
-    expect(providers).toMatchObject({
-      ok: true,
-      value: {
-        current: "deepseek/deepseek-v4-pro",
-        currentProvider: "deepseek",
-        // 缺省档位从 max 降到 high（作者裁定：DS-pro 的 high 足以翻译）。
-        // 此前 deepseek 单独走 max，其余走 high——那条分支已随之取消。
-        currentThinking: "high",
-        // 缺省 high（作者裁定 2026-08-13）：默认面向质量；「低思考防 JSON 漂移」无实测依据。
-        // 只剩两档：术语档随 ADR-0007 的融合式提取一起取消（登记并进翻译请求，没有独立调用
-        // 可以设不同档位），审校档的消费者只有全书审校，界面入口当前是关的。
-        reviewThinking: "high",
-      },
-    });
+      const providers = await service.invoke(envelope("ai.providers.list", { workspaceId: created.value.id }));
+      expect(providers).toMatchObject({
+        ok: true,
+        value: {
+          current: "deepseek/deepseek-v4-pro",
+          currentProvider: "deepseek",
+          // 缺省档位从 max 降到 high（作者裁定：DS-pro 的 high 足以翻译）。
+          // 此前 deepseek 单独走 max，其余走 high——那条分支已随之取消。
+          currentThinking: "high",
+          // 缺省 high（作者裁定 2026-08-13）：默认面向质量；「低思考防 JSON 漂移」无实测依据。
+          // 只剩两档：术语档随 ADR-0007 的融合式提取一起取消（登记并进翻译请求，没有独立调用
+          // 可以设不同档位），审校档的消费者只有全书审校，界面入口当前是关的。
+          reviewThinking: "high",
+        },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.LIGHTEE_CONFIG_DIR;
+      else process.env.LIGHTEE_CONFIG_DIR = previous;
+    }
   });
 
   it("delegates directory picking to the injected picker", async () => {

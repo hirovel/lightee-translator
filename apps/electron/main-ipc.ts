@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, Notification, safeStorage, shell } from "electron";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { createIpcService, type EngineWiring } from "./shared/ipc-service.js";
 import { AppLog } from "./shared/app-log.js";
-import { lighteeWorkspaceRegistryPath, migrateLighteeAuthEncryption, setSecretCodec } from "./shared/lightee-config.js";
+import { lighteePaths } from "./shared/app-paths.js";
+import { lighteeConfigDir, lighteeWorkspaceRegistryPath, migrateLighteeAuthEncryption, setSecretCodec } from "./shared/lightee-config.js";
 import {
   importFile,
   previewImport,
@@ -23,10 +24,24 @@ import {
 } from "@lightee/engine";
 
 /**
- * 运维日志（RH-21 / C-1）。写在 userData/logs 下——门禁与测试用隔离 profile，
+ * 运维日志（RH-21 / C-1）。落在数据根的 logs 下——门禁与测试用隔离 profile，
  * 因此不会污染用户目录。**只写诊断摘要**，脱敏在 AppLog 内部无条件执行。
  */
-export const appLog = new AppLog({ dir: join(app.getPath("userData"), "logs") });
+export const appLog = new AppLog({ dir: lighteePaths(app.getPath("userData")).logsDir });
+
+/**
+ * 传给 engine 的两条路径。
+ *
+ * `LIGHTEE_CONFIG_DIR` 是隔离验收用来把配置指到临时目录的开关。它只覆盖 config，
+ * 于是调用历史会照旧写进真实数据根——一次隔离运行反倒污染了用户的真实历史。
+ * 所以这里跟着一起隔离：给了开关，历史就落在同一个临时目录里。
+ */
+const enginePaths = {
+  configDir: lighteeConfigDir(),
+  historyFile: process.env.LIGHTEE_CONFIG_DIR?.trim()
+    ? join(lighteeConfigDir(), "llm-history.jsonl")
+    : lighteePaths(app.getPath("userData")).historyFile,
+};
 
 process.on("uncaughtException", (error) => {
   void appLog.write("error", `uncaughtException: ${error?.stack ?? String(error)}`);
@@ -144,9 +159,12 @@ const engineWiring: EngineWiring = {
     if (process.env.LIGHTEE_FAKE_LLM === "1") return fakeLlm;
     // providers 传入时以内存配置构建（思考能力探测），此时不读磁盘 models.json；
     // 密钥仍走 auth.json + decryptSecret，与共享运行时同一条路径。
+    //
+    // configDir / historyFile **必须显式传**：engine 那边已经没有 `~/.lightee` 这类
+    // 内置默认值了。路径是宿主的政策，库不替宿主选地方落盘。
     const runtime = LlmRuntime.create(options?.providers
-      ? { providers: options.providers, decryptSecret: decryptSecretForEngine }
-      : { decryptSecret: decryptSecretForEngine });
+      ? { ...enginePaths, providers: options.providers, decryptSecret: decryptSecretForEngine }
+      : { ...enginePaths, decryptSecret: decryptSecretForEngine });
     return {
       complete: async (model, messages, opts) => {
         const started = Date.now();
@@ -177,16 +195,10 @@ const engineWiring: EngineWiring = {
 // 共享 LLM 运行时（真实模式）：日志跨调用累积，Agent 控制台可查询；fake 模式为 fakeLlm（无日志）
 const sharedLlm = engineWiring.createLlm();
 
-// 工作区书架属于用户数据而非 Electron profile。首次升级时从旧 profile 自动迁移一次。
-const explicitRegistryPath = process.env.LIGHTEE_WORKSPACE_REGISTRY;
-const persistentRegistryPath = explicitRegistryPath ?? lighteeWorkspaceRegistryPath();
-if (!explicitRegistryPath) {
-  const legacyRegistryPath = join(app.getPath("userData"), "workspaces.json");
-  if (!existsSync(persistentRegistryPath) && existsSync(legacyRegistryPath)) {
-    mkdirSync(dirname(persistentRegistryPath), { recursive: true });
-    copyFileSync(legacyRegistryPath, persistentRegistryPath);
-  }
-}
+// 工作区书架：数据根的 config/workspaces.json（只存清单，译稿本体在用户自选目录里）。
+// 从旧位置搬运由启动早期的 storage-migration 统一负责——路径迁移集中在一处，
+// 免得又变成「每个模块各搬各的」。
+const persistentRegistryPath = process.env.LIGHTEE_WORKSPACE_REGISTRY ?? lighteeWorkspaceRegistryPath();
 
 export const ipcService = createIpcService({
   registryPath: persistentRegistryPath,

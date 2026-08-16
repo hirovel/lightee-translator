@@ -34,6 +34,7 @@ import { readFile, rm } from "node:fs/promises";
 import { spawn, spawnSync } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { lighteePaths, lighteeUserDataRoot } from "../dist-main/shared/app-paths.js";
 
 const OLD_VERSION = "0.9.90";
 const NEW_VERSION = "0.9.91";
@@ -49,11 +50,11 @@ const oldInstaller = join(oldOutDir, `Lightee-${OLD_VERSION}-win-x64-setup.exe`)
 const installDir = join(process.env.LOCALAPPDATA, "Programs", "Lightee");
 const lightee_exe = join(installDir, "Lightee.exe");
 const uninstaller = join(installDir, "Uninstall Lightee.exe");
-// userData 目录不是 productName（"Lightee"），是打包后 package.json 的 name 字段
-// （"lightee-electron"）——electron-builder 不会自动把两者对齐。第二轮演练在这里
-// 栽过一次：AppLog 其实立刻就写了 update-downloaded，脚本却因为查错目录空等了
-// 整整 5 分钟才超时，被误判成「更新流程卡住/崩溃」。
-const appLogDir = join(process.env.APPDATA, "lightee-electron", "logs");
+// 数据根由 app.setPath("userData") 显式指定成 %APPDATA%\Lightee（见 shared/app-paths.ts），
+// 从同一份定义算出来，别在这里另写一遍字面量。第二轮演练在这里栽过一次：AppLog 其实
+// 立刻就写了 update-downloaded，脚本却因为查错目录空等了整整 5 分钟才超时，
+// 被误判成「更新流程卡住/崩溃」。
+const appLogDir = lighteePaths(lighteeUserDataRoot(process.env.APPDATA)).logsDir;
 
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);

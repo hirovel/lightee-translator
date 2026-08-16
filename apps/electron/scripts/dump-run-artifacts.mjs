@@ -20,14 +20,14 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { lighteePaths, lighteeUserDataRoot } from "../dist-main/shared/app-paths.js";
 
 const fence = (text) => ["```", text || "（空）", "```"].join("\n");
 
 /** 读这一轮时间窗内的调用历史（逐次网络尝试一条，TR-02 之后失败尝试也在内） */
 async function readHistory(since) {
-  const path = join(homedir(), ".lightee", "llm-history.jsonl");
+  const path = lighteePaths(lighteeUserDataRoot(process.env.APPDATA)).historyFile;
   const raw = await readFile(path, "utf8").catch(() => "");
   const rows = [];
   for (const line of raw.split(/\r?\n/)) {

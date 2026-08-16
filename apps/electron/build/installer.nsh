@@ -25,12 +25,17 @@
 
   ; ——— 二、本机数据 ———
   ;
-  ; 默认保留。卸载后重装、在安装版与 Scoop 之间换渠道，在实践里都很常见，
-  ; 数据一旦跟着应用走，一次误操作就没了译稿。所以只有两种情况才清：
+  ; **只认命令行开关，不弹任何对话框。** 这是硬约束，不是取舍：
   ;
-  ;   1. 命令行带 --delete-app-data。这是 electron-builder 自带的开关，它自己会清
-  ;      %APPDATA%\lightee-electron；这里补上它不可能知道的 ~/.lightee。
-  ;   2. 交互式卸载时用户明确选「是」（对话框默认「否」）。
+  ; 卸载器会把自己复制成 Un_A.exe 再重启一遍，`/S` 在那一跳上未必跟得过去；
+  ; 而 MessageBox MB_YESNO 的默认焦点在「是」上，`/SD IDNO` 又只在真正静默时
+  ; 才起作用。两件事叠在一起，一次本该「什么都不删」的普通卸载就可能把用户的
+  ; 设置、API Key 与全部调用历史删干净——实测发生过一次，无法恢复。
+  ;
+  ; 所以普通卸载必须在**结构上**不可能删数据：没有分支能走到删除，除非命令行
+  ; 明确给了 --delete-app-data。若日后要在卸载界面上提供「顺便清数据」，走
+  ; electron-builder 的 customUnWelcomePage 复选框（默认不勾）单独立票，
+  ; 且每条路径实测过才能上。
   ;
   ; ${isUpdated} 这道闸不能少：**自动更新走的也是这套卸载流程**，在那里删数据
   ; 等于每次更新都把用户的设置和历史清空。electron-builder 自己的 app-data 清理
@@ -43,27 +48,16 @@
     ${GetOptions} $R0 "--delete-app-data" $R1
     ${ifNot} ${errors}
       StrCpy $lighteePurgeData "1"
-    ${else}
-      ; 静默卸载而又没给开关 —— 一律保留，不弹窗（弹了也没人能点）。
-      ${ifNot} ${Silent}
-        MessageBox MB_YESNO|MB_ICONQUESTION "是否同时删除本机上的设置与翻译历史？$\r$\n$\r$\n包含 API Key、模型配置与调用历史。$\r$\n你的译稿工作区不在其中，不会被删除。$\r$\n$\r$\n选「否」将保留这些数据，重新安装后可继续使用。" /SD IDNO IDYES lighteePurgeYes
-        Goto lighteePurgeDone
-        lighteePurgeYes:
-        StrCpy $lighteePurgeData "1"
-        lighteePurgeDone:
-      ${endif}
     ${endif}
   ${endif}
 
   ${if} $lighteePurgeData == "1"
+    ; 数据根是 $APPDATA\Lightee（app.setPath("userData") 显式指定，见 user-data-root.js）。
+    ; electron-builder 自带的清理认的是 productFilename 与 package name 两个名字，
+    ; 前者正好等于 Lightee，所以新根它会自己删；这里补的是它不可能知道的两处旧址：
+    ; 0.10 之前的 ~/.lightee，以及迁移时留下的备份副本。
     RMDir /r "$PROFILE\.lightee"
-    ; userData 目录名取自打包后 package.json 的 name（lightee-electron），
-    ; 不是 productName（Lightee）——electron-builder 不会把两者对齐。
-    ;
-    ; 走命令行开关时 electron-builder 后面会自己清这一份；但交互式选「是」
-    ; 时它不会，因为它只认命令行。两条路径的结果必须一致，所以这里显式补上。
-    ; 对已不存在的目录再删一次是无害的。
-    RMDir /r "$APPDATA\lightee-electron"
+    RMDir /r "$PROFILE\.lightee.migrated"
   ${endif}
 
 !macroend

@@ -14,6 +14,8 @@
       "dist/**/*",
       "dist-main/**/*",
       "main.js",
+      "user-data-root.js",
+      "storage-migration-boot.js",
       "single-instance.js",
       "preload.js",
       "package.json",

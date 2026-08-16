@@ -18,6 +18,10 @@
       "types": "./dist/atomic-fs.d.ts",
       "import": "./dist/atomic-fs.js"
     },
+    "./rotating-jsonl": {
+      "types": "./dist/rotating-jsonl.d.ts",
+      "import": "./dist/rotating-jsonl.js"
+    },
     "./archive-registry": {
       "types": "./dist/archive-registry.d.ts",
       "import": "./dist/archive-registry.js"

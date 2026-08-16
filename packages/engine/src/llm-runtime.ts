@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import path, { join } from "node:path";
 import { readFile, stat } from "node:fs/promises";
 import fs from "node:fs";
+import { appendLineWithRotation } from "@lightee/core/rotating-jsonl";
 import { retryCall, errorMessageOf, attachErrorKind, isRetryableError, type RetryPolicy, type RetryCallbacks } from "./llm-retry.ts";
 
 export interface LlmMessage {
@@ -608,12 +609,12 @@ export class LlmRuntime {
     const full: LlmCallLogEntry = { ...entry, id: `llm-${++this.callSeq}-${Date.now().toString(36)}`, ts: Date.now() };
     this.callLog.push(full);
     if (this.callLog.length > this.callLogMax) this.callLog.splice(0, this.callLog.length - this.callLogMax);
-    // 历史持久化（JSONL 同步追加——LLM 调用频率低，避免异步竞态丢记录；失败静默）
+    // 历史持久化（JSONL 同步追加——LLM 调用频率低，避免异步竞态丢记录；失败静默）。
+    // 走 appendLineWithRotation 而不是裸 appendFileSync：这个文件存的是完整 prompt 与
+    // 响应，实测每次调用约 62KB，一本 300 章的书就要几十 MB，而它此前只增不减。
+    // 轮转后规范路径始终是最新的那份，getHistory 的尾窗读取因此不受影响。
     if (this.historyFile) {
-      try {
-        fs.mkdirSync(path.dirname(this.historyFile), { recursive: true });
-        fs.appendFileSync(this.historyFile, JSON.stringify(full) + "\n", "utf-8");
-      } catch { /* 历史写失败不阻断调用 */ }
+      appendLineWithRotation(this.historyFile, JSON.stringify(full) + "\n");
     }
   }
 

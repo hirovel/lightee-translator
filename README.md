@@ -21,9 +21,18 @@ AI Agent 辅助翻译的日文轻小说工作台
 
 ## 安装
 
-正式版本准备中。目前可从源码构建。
+**Scoop** 命令行安装
 
-翻译需要一个 AI 服务商的 API Key，在设置里填写。Key 经 Windows DPAPI 加密后存在本机，不会明文落盘，也不会出现在日志里。
+```powershell
+scoop bucket add lightee https://github.com/hirovel/scoop-lightee
+scoop install lightee
+```
+
+**直接下载**：[Releases](https://github.com/hirovel/lightee-translator/releases) 下载 `Lightee-0.10.0-win-x64-setup.exe`。免安装版是 `-portable.exe`。
+
+注：安装包没有代码签名证书，Windows 会弹「已保护你的电脑」。
+
+翻译需要一个 AI 服务商的 API Key，在设置内填写。Key 经 Windows DPAPI 加密后存在本机来保证安全性。
 
 ---
 

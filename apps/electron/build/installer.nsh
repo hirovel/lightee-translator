@@ -54,10 +54,12 @@
   ${if} $lighteePurgeData == "1"
     ; 数据根是 $APPDATA\Lightee（app.setPath("userData") 显式指定，见 user-data-root.js）。
     ; electron-builder 自带的清理认的是 productFilename 与 package name 两个名字，
-    ; 前者正好等于 Lightee，所以新根它会自己删；这里补的是它不可能知道的两处旧址：
-    ; 0.10 之前的 ~/.lightee，以及迁移时留下的备份副本。
+    ; 前者正好等于 Lightee，所以新根它会自己删；这里补的是它不可能知道的旧址，
+    ; 以及迁移时留下的备份副本——「完整卸载」就该是完整的，留一个备份目录在那里
+    ; 等于用户以为清干净了其实没有。
     RMDir /r "$PROFILE\.lightee"
     RMDir /r "$PROFILE\.lightee.migrated"
+    RMDir /r "$APPDATA\lightee-electron.migrated"
   ${endif}
 
 !macroend
